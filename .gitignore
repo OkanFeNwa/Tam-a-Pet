@@ -2,3 +2,8 @@ native/bin/
 native/obj/
 *.lnk
 native/dist/
+
+# local-only material: downloaded asset packs, video projects, old node modules
+Nuova cartella/
+brag-output*/
+node_modules/

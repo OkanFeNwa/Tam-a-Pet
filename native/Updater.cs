@@ -38,6 +38,7 @@ readonly record struct AppVersion(int Major, int Minor, int Patch, char Letter) 
 static class Updater
 {
     const string Repo = "OkanFeNwa/Tam-a-Pet";
+    public const string ReleasesUrl = "https://github.com/" + Repo + "/releases";   // where the changelog (release notes) lives
     const string Asset = "TamAPet-Portable.exe";   // the release carries TamAPet-Setup.exe (installer) and this (portable, and the update payload)
 
     public sealed record Release(AppVersion Version, string Tag, string Url);

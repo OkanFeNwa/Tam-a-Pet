@@ -27,6 +27,7 @@
   <ItemGroup>
     <EmbeddedResource Include="cat-sprite.png" LogicalName="cat-sprite.png" />
     <EmbeddedResource Include="icon.ico" LogicalName="icon.ico" />
+    <EmbeddedResource Include="sprites\*.png" LogicalName="spr.%(Filename)" />
     <EmbeddedResource Include="sounds\*.wav" LogicalName="snd.%(Filename)" />
   </ItemGroup>
 </Project>

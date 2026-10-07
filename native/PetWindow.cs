@@ -27,6 +27,106 @@ sealed class PetWindow : Form
         ["frenzy"] = (9, 8, false),  // too many clicks
     };
 
+    // The new sprite sheet (11 columns x 53 rows of 32x32): the row for each animation when facing right / left
+    static readonly Dictionary<string, (int right, int left, int frames, bool once)> NewAnims = new()
+    {
+                ["idle"] = (0, 0, 1, false),        // fallback only: idle is built in Anim()
+        ["lick"] = (36, 36, 9, false),      // washing, sitting
+        ["eat"] = (23, 22, 8, false),
+        ["sleep"] = (13, 12, 2, false),     // the four sleeping poses start at row 12 (facing us, back to us, curled up, stretched out), two rows each (left, right)
+        ["pet"] = (13, 12, 2, false),       // being stroked: lying facing us, with hearts
+        ["play"] = (47, 46, 7, false),      // paw attack
+        ["pounce"] = (52, 52, 4, true),     // on the hind legs
+        ["frenzy"] = (42, 41, 2, false),    // hissing
+        ["yawn"] = (32, 32, 8, false),
+        ["scratch"] = (40, 39, 11, false),
+    };
+
+    // The new sprites have a row for each of the eight directions. Sector: 0 right, 1 right-down, 2 down, 3 left-down, 4 left, 5 left-up, 6 up, 7 right-up
+    static int Sector(double dx, double dy)
+    {
+        double ax = Math.Abs(dx), ay = Math.Abs(dy);
+        if (ay < 0.4 * ax) return dx >= 0 ? 0 : 4;
+        if (ax < 0.4 * ay) return dy > 0 ? 2 : 6;
+        return dx > 0 ? (dy > 0 ? 1 : 7) : (dy > 0 ? 3 : 5);
+    }
+    static readonly int[] WalkRows = { 6, 9, 4, 8, 7, 11, 5, 10 }, WalkFrames = { 8, 6, 4, 6, 8, 6, 4, 6 };
+    static readonly int[] PawRows = { 47, 48, 44, 49, 46, 51, 45, 50 }, PawFrames = { 7, 9, 9, 9, 7, 5, 5, 5 };
+    static (int row, int frames) WalkRow(double dx, double dy) { int k = Sector(dx, dy); return (WalkRows[k], WalkFrames[k]); }
+    static readonly int[] EatRows = { 23, 24, 20, 25, 22, 27, 21, 26 };   // by sector: the cat eats looking towards the bowl
+    bool meowAlt, yawnAlt;   // the sitting cat has two ways of meowing and of yawning
+    double playDx = 1, playDy;   // where the paw attack is aimed (the mouse that was clicked, or the ball)
+    double walkDx = 1, walkDy;
+
+    // Idle with the new sprites: the first picture of row 0 (sitting), 1 (standing) or 2 (lying), seen from the front, still;
+    // or lying on the side, eyes open and now and then closed.
+    // (the other pictures of those rows are the same pose seen from other sides: not animation frames)
+    static readonly string[] IdleVars = { "sit", "sit", "sit", "sit", "sit", "stand", "lie", "side", "side" };
+    string idleVar = "sit";
+    long idleKeepUntil;   // the idle pose is not changed before this time (a cat that has just arrived stays standing for a moment)
+    int sleepPose, lastLook = -1;   // sleepPose: 0 lying facing us, 1 lying with its back to us, 2 curled up, 3 stretched out (it goes with how tired the cat is, and with the cat)
+
+    // A resting pose; with a need it is more likely to show it: standing, the sad face when unhappy, begging when hungry
+    string PickIdle()
+    {
+        if (happiness < 25 && rnd.NextDouble() < 0.4) return "sad";
+        if (hunger < 25 && rnd.NextDouble() < 0.4) return "beg";
+        if ((hunger < 40 || energy < 40 || happiness < 50) && rnd.NextDouble() < 0.3) return "stand";
+        return IdleVars[rnd.Next(IdleVars.Length)];
+    }
+
+    // Looking at the mouse (sitting/standing, first row of each: front, back, left, right, diagonal left, diagonal right)
+    static readonly int[][] LookCols = Enumerable.Range(0, 6).Select(c => new[] { c, c }).ToArray();
+    int LookCol()
+    {
+        double dx = cursor.X - (x + size / 2.0), dy = cursor.Y - (y + size / 2.0), ax = Math.Abs(dx), ay = Math.Abs(dy);
+        if (ay < 0.4 * ax) return dx < 0 ? 2 : 3;   // mostly to the side
+        if (ax < 0.4 * ay) return 0;                  // straight above or below: face it
+        return dx < 0 ? 4 : 5;                        // diagonal
+    }
+    static readonly int[] OpenEyesL = { 0, 0, 0, 2 }, OpenEyesR = { 1, 1, 1, 3 }, FirstCol = { 0, 0 }, UprightCols = { 2, 3 };
+
+    // which row, how many frames, and whether the picture is mirrored (the old sprites only face right)
+    (int row, int frames, bool once, bool mirror, int[]? cols, bool wag) Anim(string name)
+    {
+        if (Cfg.ClassicSprites)
+        {
+            var c = Anims.TryGetValue(name, out var cc) ? cc : Anims["idle"];
+            return (c.row, c.frames, c.once, !facingRight, null, false);
+        }
+        if (name == "near") return (idleVar == "stand" ? 1 : 0, 2, false, false, LookCols[LookCol()], false);
+        if (name == "idle")
+            return idleVar switch
+            {
+                "sad" => (43, 1, false, !facingRight, FirstCol, false),    // the sad face
+                "beg" => (52, 2, false, false, UprightCols, false),        // up on its hind legs
+                "stand" => (1, 1, false, false, FirstCol, false),
+                "lie" => (2, 1, false, false, FirstCol, false),
+                "side" => (3, 4, false, false, facingRight ? OpenEyesR : OpenEyesL, false),
+                _ => (0, 1, false, false, FirstCol, false),
+            };
+        if (name is "walk" or "run") { var (r, f) = WalkRow(walkDx, walkDy); return (r, f, false, false, null, false); }
+        if (name == "eat")
+        {
+            int k = bowl != null ? Sector(bowl.Center.X - (x + size / 2.0), bowl.Center.Y - (y + size / 2.0)) : facingRight ? 0 : 4;
+            return (EatRows[k], 8, false, false, null, false);
+        }
+        if (name == "meow")   // in the pose the cat is resting in
+            return (idleVar is "lie" or "side" ? 31 : idleVar == "stand" ? 29 : meowAlt ? 30 : 28, 3, false, false, null, false);
+        if (name == "lick")   // washing: 9, 9 or 7 frames; the cat that grooms another one always sits
+        {
+            string v = social != "" ? "sit" : idleVar;
+            return v is "lie" or "side" ? (38, 7, false, false, null, false) : (v == "stand" ? 37 : 36, 9, false, false, null, false);
+        }
+        if (name == "yawn")   // 8 frames; in the pose the cat is resting in
+            return (idleVar is "lie" or "side" ? 35 : idleVar == "stand" ? 33 : yawnAlt ? 34 : 32, 8, false, false, null, false);
+        if (name == "play") { int k = Sector(playDx, playDy); return (PawRows[k], PawFrames[k], false, false, null, false); }
+        var n = NewAnims.TryGetValue(name, out var nn) ? nn : NewAnims["idle"];
+        int row = facingRight ? n.right : n.left;
+        if (name == "sleep") row += sleepPose * 2;
+        return (row, n.frames, n.once, n.right == n.left && !facingRight, null, false);
+    }
+
     // Every cat is one of these windows (up to two)
     public static readonly List<PetWindow> All = new();
     public static PetWindow? Find(int index) => All.FirstOrDefault(c => c.cat.Index == index);
@@ -344,7 +444,7 @@ sealed class PetWindow : Form
         {
             case Goal.Bowl when bowl != null:
                 facingRight = bowl.Center.X > x + size / 2.0;
-                SetState("eat");   // hunger is restored gradually in Logic() while eating
+                if (bowl.HasFood) SetState("eat");   // hunger is restored gradually in Logic() while eating
                 break;
             case Goal.Bed:
                 sleepManual = false;   // wakes by itself when rested
@@ -466,13 +566,19 @@ sealed class PetWindow : Form
     void Kick()
     {
         if (ball == null) return;
-        double ang = Math.Atan2(ball.Center.Y - (y + size / 2.0), ball.Center.X - (x + size / 2.0)) + (rnd.NextDouble() - 0.5) * 1.2;
+        // The cat goes to the middle of the ball, so the ball is hardly ever "to one side": the direction of the hit is the
+        // direction the cat came from (it was running towards it), unless the ball really is off to one side
+        double bx = ball.Center.X - (x + size / 2.0), by = ball.Center.Y - (y + size / 2.0);
+        bool onTop = Math.Sqrt(bx * bx + by * by) < size * 0.2;
+        double aimX = onTop ? walkDx : bx, aimY = onTop ? walkDy : by;
+        double ang = Math.Atan2(aimY, aimX) + (rnd.NextDouble() - 0.5) * 1.2;
         double sp = (700 + rnd.NextDouble() * 600) * S;
         double vx = Math.Cos(ang) * sp, vy = Math.Sin(ang) * sp - 500 * S;
         lastKickAt = Now;
         kickSound = true;   // happiness grows gradually while playing (see Logic)
         Target = null;
         facingRight = vx > 0;
+        playDx = aimX; playDy = aimY;
         SetState("play", (int)Cfg.Cycle);
         kickCooldown = Now + (long)Cfg.Cycle + 300;
         // the ball is hit when the paw comes down, not before the animation starts
@@ -491,6 +597,16 @@ sealed class PetWindow : Form
     // Debug: current stats, and a way to start any interaction by hand (developer page in settings)
     public (double Hunger, double Happiness, double Energy, string State) Stats => (hunger, happiness, energy, state);
 
+    // Debug: stop what the cat is doing and show how it rests when it needs something, for a few seconds
+    void ShowIdle(string pose)
+    {
+        Target = null;
+        if (social != "") EndSocial();
+        state = "idle";
+        lockUntil = Now + 6000;
+        idleVar = pose; idleKeepUntil = Now + 6000;
+    }
+
     public void Trigger(string what)
     {
         if (what != "sleep" && state == "sleep") state = "idle";   // wake up first
@@ -503,11 +619,11 @@ sealed class PetWindow : Form
             case "bowl": ToggleProp(false); break;
             case "bed": ToggleProp(true); break;
             case "ball": ToggleBall(); break;
-            case "meow": Say("meow"); break;
+            case "meow": Say("meow"); if (!Cfg.ClassicSprites) { Target = null; meowAlt = !meowAlt; SetState("meow", 1300); } break;
             case "pet": Target = null; SetState("pet", 4000); break;   // debug: the stroking pose for 4 s
-            case "hungry": hunger = 25; break;      // debug: set a need so the cat reacts to it
-            case "sad": happiness = 25; break;
-            case "tired": energy = 30; break;
+            case "hungry": hunger = 15; ShowIdle("beg"); break;      // debug: set a need so the cat reacts to it
+            case "sad": happiness = 15; ShowIdle("sad"); break;
+            case "tired": energy = 30; ShowIdle("stand"); break;
             case "play": Target = null; SetState("play", (int)Cfg.Cycle); break;
             case "frenzy": Target = null; Anger(); break;
             case "groom": case "fight": if (FindPartner() is { } other) StartSocial(other, what); break;
@@ -627,7 +743,7 @@ sealed class PetWindow : Form
     // it fades out shortly after the mouse leaves
     const int HoverDelay = 1500;
     // seconds from full to empty
-    const double HungerSeconds = 600, HappinessSeconds = 300, EnergySeconds = 900;   // 10, 5 and 15 minutes (a balanced cat; the character scales each)
+    const double HungerSeconds = 1200, HappinessSeconds = 600, EnergySeconds = 1800;   // 20, 10 and 30 minutes (a balanced cat; the character scales each)
 
     void UpdateHover()
     {
@@ -679,6 +795,11 @@ sealed class PetWindow : Form
 
         FaceMouse();
         UpdateHover();
+        if (!Cfg.ClassicSprites && currentAnim == "near")   // turn towards the mouse as it moves
+        {
+            int look = LookCol();
+            if (look != lastLook) { lastLook = look; Redraw(); }
+        }
 
         if (pressed) { TrackPetting(p, speed, now); return; }   // button held: stroking, not a mouse "flick"
 
@@ -746,7 +867,7 @@ sealed class PetWindow : Form
         clicks.Enqueue(now);
         Target = null;
         if (clicks.Count >= 3 && now >= angryCooldownUntil) { Anger(); clicks.Clear(); }
-        else SetState("play", (int)Cfg.Cycle);
+        else { playDx = cursor.X - (x + size / 2.0); playDy = cursor.Y - (y + size / 2.0); SetState("play", (int)Cfg.Cycle); }
     }
 
     // ---- loops ----------------------------------------------------------------------------------
@@ -764,8 +885,12 @@ sealed class PetWindow : Form
         FaceMouse();
         UpdateHover();
         string name = state == "idle" && mouseNear ? "near" : state;
-        if (currentAnim != name) { frame = 0; currentAnim = name; }
-        var a = Anims[name];
+        if (currentAnim != name)
+        {
+            frame = 0; currentAnim = name;
+            if (name == "sleep") sleepPose = energy < 10 ? 3 : energy < 25 ? 2 : (rnd.NextDouble() < 0.7 ? cat.Index % 2 : 1 - cat.Index % 2);   // the more tired, the more it sprawls; otherwise facing us or turned away
+        }
+        var a = Anim(name);
         Redraw();
         if (name is "sleep" or "pet")
         {
@@ -773,7 +898,7 @@ sealed class PetWindow : Form
             SetAnimInterval(Math.Max(15, (int)(Cfg.Cycle / a.frames / 2)));
             if (++sleepTick % 2 != 0) return;
         }
-        else SetAnimInterval(Math.Max(15, (int)(Cfg.Cycle / a.frames)));
+        else SetAnimInterval(Math.Max(15, (int)(Cfg.Cycle / a.frames / (name == "run" && !Cfg.ClassicSprites ? 2 : 1))));
         frame = a.once ? Math.Min(frame + 1, a.frames - 1) : (frame + 1) % a.frames;
     }
 
@@ -802,12 +927,13 @@ sealed class PetWindow : Form
             x = target.Value.X; y = target.Value.Y;
             var reached = goal;
             Target = null;
-            if (state == "walk" || state == "run") state = "idle";
+            if (state == "walk" || state == "run") { state = "idle"; idleVar = "stand"; idleKeepUntil = Now + 2000; }   // it has just arrived: stands for a moment
             Arrived(reached);
         }
         else
         {
             x += dx / dist * step; y += dy / dist * step;
+            walkDx = dx; walkDy = dy;
             if (Math.Abs(dx) > 1) facingRight = dx > 0;
         }
         Location = new Point((int)Math.Round(x), (int)Math.Round(y));
@@ -849,10 +975,11 @@ sealed class PetWindow : Form
         }
         else if (state == "eat")
         {
-            hunger = Math.Min(100, hunger + 8);       // keeps eating until full
-            Say("munch");
+            double got = bowl?.Take(Math.Min(8, 100 - hunger)) ?? 0;   // what it eats leaves the bowl
+            hunger = Math.Min(100, hunger + got);       // keeps eating until full (or until the bowl is empty)
+            if (got > 0) Say("munch");
             Target = null; idleTimer = 0;
-            if (hunger >= 100 || bowl == null) state = "idle";
+            if (hunger >= 100 || got <= 0) state = "idle";
         }
         else if (Now < lockUntil) { }                 // click / pounce / lick animation playing
         else if (energy < 20)
@@ -863,15 +990,21 @@ sealed class PetWindow : Form
         else if (target != null) { }                  // walking/running - controlled by Move()
         else
         {
-            if (state is "pounce" or "lick" or "eat") state = "idle";
+            if (state is "pounce" or "lick" or "eat" or "yawn" or "scratch" or "meow") state = "idle";
             idleTimer++;
+            if (Now >= idleKeepUntil && rnd.NextDouble() < 0.15)   // another way of resting now and then; mostly sitting
+                idleVar = PickIdle();
             double r = rnd.NextDouble();
             long now = Now;
-            if (rnd.NextDouble() < (hunger < 30 ? 1 / 15.0 : 1 / 50.0) * Traits.Chatty) Say(hunger < 30 ? "meowfood" : "meow");   // an occasional meow, more when hungry
+            if (rnd.NextDouble() < (hunger < 30 ? 1 / 15.0 : 1 / 50.0) * Traits.Chatty)   // an occasional meow, more when hungry
+            {
+                Say(hunger < 30 ? "meowfood" : "meow");
+                if (!Cfg.ClassicSprites) { meowAlt = !meowAlt; SetState("meow", 1300); return; }   // the new sprites open their mouth
+            }
             // Use the objects according to needs: tired -> bed, hungry -> bowl, sad -> ball
             bool playing = now < chaseUntil && happiness < 90;   // a play session goes on until it is happy again
             if (bed != null && energy < 40) GoTo(Goal.Bed);
-            else if (bowl != null && hunger < 40) GoTo(Goal.Bowl);
+            else if (bowl != null && bowl.HasFood && hunger < 40) GoTo(Goal.Bowl);   // an empty bowl is no use
             else if (ball != null && (happiness < 50 || playing))
             {
                 if (!playing) chaseUntil = now + 60000;   // at most a minute per session
@@ -891,6 +1024,7 @@ sealed class PetWindow : Form
                 idleTimer = 0;
             }
             else if (idleTimer > 5 && r < 0.1) { SetState("lick", 2500); idleTimer = 0; }
+            else if (!Cfg.ClassicSprites && idleTimer > 5 && r < 0.16) { bool yawn = rnd.NextDouble() < (energy < 50 ? 0.8 : 0.4); yawnAlt = !yawnAlt; if (!yawn) { idleVar = "sit"; facingRight = rnd.NextDouble() < 0.5; }   /* scratching is done sitting, on either side */ SetState(yawn ? "yawn" : "scratch", 2400); idleTimer = 0; }   // yawns more when tired   // only the new sprites have these
             else state = "idle";
         }
     }
@@ -942,10 +1076,13 @@ sealed class PetWindow : Form
     void Redraw()
     {
         if (!IsHandleCreated) return;
-        var a = Anims[currentAnim];
+        var a = Anim(currentAnim);
         g.Clear(Color.Transparent);
-        var dest = facingRight ? new Rectangle(0, 0, size, size) : new Rectangle(size, 0, -size, size);   // negative width = mirror
-        g.DrawImage(sheet, dest, frame % a.frames * Cell, a.row * Cell, Cell, Cell, GraphicsUnit.Pixel, attrs);
+        int dy = Cfg.ClassicSprites ? 0 : CatSprite.FootDy(a.row) * size / Cell;   // new sprites: paws on the ground line
+        bool flip = a.mirror ^ (a.wag && frame % 2 == 1);
+        var dest = flip ? new Rectangle(size, dy, -size, size) : new Rectangle(0, dy, size, size);   // negative width = mirror
+        int col = a.cols != null ? a.cols[frame % a.frames] : frame % a.frames;
+        g.DrawImage(sheet, dest, col * Cell, a.row * Cell, Cell, Cell, GraphicsUnit.Pixel, attrs);
 
         if (currentAnim == "sleep") DrawZzz();
         else if (currentAnim == "pet") DrawHearts();

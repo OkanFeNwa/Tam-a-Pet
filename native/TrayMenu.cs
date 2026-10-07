@@ -88,6 +88,10 @@ sealed class MenuRenderer : ToolStripProfessionalRenderer
     protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
     {
         e.TextColor = !e.Item.Enabled ? Theme.Muted : e.Item.Selected ? Theme.Accent : Theme.Text;
+        // centred on the highlighted pill (which starts 1 px down and is 3 px shorter than the item), not on the padded item
+        var r = e.TextRectangle;
+        e.TextRectangle = new Rectangle(r.X, 1, r.Width, e.Item.Height - 3);
+        e.TextFormat = (e.TextFormat & ~(TextFormatFlags.Top | TextFormatFlags.Bottom)) | TextFormatFlags.VerticalCenter;
         base.OnRenderItemText(e);
     }
 

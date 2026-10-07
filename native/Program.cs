@@ -18,12 +18,16 @@ static class Program
         if (at >= 0 && at + 1 < args.Length) { Audio.SelfTest(args[at + 1]); return; }
         int dm = Array.IndexOf(args, "--dump-mix");
         if (dm >= 0 && dm + 1 < args.Length) { Audio.DumpMix(args[dm + 1]); return; }
-        int dc = Array.IndexOf(args, "--dump-cat");   // file fur1 fur2 eyes (hex): a few frames in those colours
+        int dc = Array.IndexOf(args, "--dump-cat");   // file fur1 fur2 eyes [pattern] [accessory|-] [classic]: the whole sheet in those colours
         if (dc >= 0 && dc + 4 < args.Length)
         {
-            CatSprite.TryParse(args[dc + 2], out var f1); CatSprite.TryParse(args[dc + 3], out var f2); CatSprite.TryParse(args[dc + 4], out var ec);
-            using var sheet = CatSprite.BuildSheet(f1, f2, ec, args.Length > dc + 5 ? args[dc + 5] : "none");
-            using var outImg = new Bitmap(8 * 32 * 3, 10 * 32 * 3);
+            var prof = new CatProfile(0);
+            CatSprite.TryParse(args[dc + 2], out prof.Fur1); CatSprite.TryParse(args[dc + 3], out prof.Fur2); CatSprite.TryParse(args[dc + 4], out prof.Eyes);
+            prof.Pattern = args.Length > dc + 5 ? args[dc + 5] : "none";
+            prof.Accessory = args.Length > dc + 6 && args[dc + 6] != "-" ? args[dc + 6] : "";
+            Cfg.ClassicSprites = args.Length > dc + 7 && args[dc + 7] == "classic";
+            using var sheet = CatSprite.BuildSheet(prof);
+            using var outImg = new Bitmap(sheet.Width * 3, sheet.Height * 3);
             using (var g = System.Drawing.Graphics.FromImage(outImg))
             {
                 g.Clear(Color.FromArgb(70, 70, 80));
@@ -34,6 +38,32 @@ static class Program
             outImg.Save(args[dc + 1]);
             return;
         }
+
+        int dsh = Array.IndexOf(args, "--dump-sheet");   // file fur eyes pattern variantColour accessory|- nose ears: one cat's sprite sheet, as the app draws it (for videos and docs)
+        if (dsh >= 0 && dsh + 7 < args.Length)
+        {
+            var prof = new CatProfile(0);
+            CatSprite.TryParse(args[dsh + 2], out prof.Fur1); CatSprite.TryParse(args[dsh + 3], out prof.Eyes);
+            prof.Pattern = args[dsh + 4]; CatSprite.TryParse(args[dsh + 5], out prof.Fur3);
+            prof.Accessory = args[dsh + 6] == "-" ? "" : args[dsh + 6];
+            CatSprite.TryParse(args[dsh + 7], out prof.Nose);
+            if (args.Length > dsh + 8) CatSprite.TryParse(args[dsh + 8], out prof.Ears);
+            Cfg.ClassicSprites = false;
+            using var sheet = CatSprite.BuildSheet(prof);
+            sheet.Save(args[dsh + 1]);
+            return;
+        }
+        int dpr = Array.IndexOf(args, "--dump-props");   // folder bowlColour bedColour ballColour: the three objects (bowl in its four levels), one pixel per art pixel
+        if (dpr >= 0 && dpr + 4 < args.Length)
+        {
+            Directory.CreateDirectory(args[dpr + 1]);
+            CatSprite.TryParse(args[dpr + 2], out var bc); CatSprite.TryParse(args[dpr + 3], out var dc2); CatSprite.TryParse(args[dpr + 4], out var lc);
+            for (int lv = 0; lv < 4; lv++) { using var b = PixelArt.BowlImage(1, bc, lv); b.Save(Path.Combine(args[dpr + 1], $"bowl-{lv}.png")); }
+            using (var b = PixelArt.BedImage(1, dc2)) b.Save(Path.Combine(args[dpr + 1], "bed.png"));
+            using (var b = PixelArt.BallImage(1, lc)) b.Save(Path.Combine(args[dpr + 1], "ball.png"));
+            return;
+        }
+
         int dr = Array.IndexOf(args, "--dump-reminder");
         if (dr >= 0 && dr + 1 < args.Length)
         {

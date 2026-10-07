@@ -9,18 +9,6 @@ sealed class SettingsForm : Form
 {
     static readonly (string code, string name)[] Languages = { ("en", "English"), ("it", "Italiano"), ("fr", "Français"), ("es", "Español") };
 
-    // key, group, min, max, step, value formatter
-    static readonly (string key, string group, double min, double max, double step, Func<double, string> fmt)[] Fields =
-    {
-        ("nearRange", "mouse", 50, 400, 10, v => v.ToString("0")),
-        ("jumpRange", "mouse", 100, 1500, 50, v => v.ToString("0")),
-        ("jumpSpeed", "mouse", 500, 6000, 100, v => v.ToString("0")),
-        ("jumpCooldown", "mouse", 0, 30, 1, v => v.ToString("0")),
-        ("wander", "movement", 0, 0.3, 0.01, v => Math.Round(v * 100).ToString("0")),
-        ("walkSpeed", "movement", 1, 6, 0.5, v => v.ToString("0.#")),
-        ("cycle", "movement", 600, 3000, 50, v => v.ToString("0")),
-    };
-
     // sound credits: translation key of what it is used for, and who made it (the cat meows need none)
     static readonly (string key, string who)[] Credits =
     {
@@ -33,6 +21,16 @@ sealed class SettingsForm : Form
     {
         Color.FromArgb(0xE0, 0xE0, 0xE0), Color.FromArgb(0xF0, 0xE2, 0xC2), Color.FromArgb(0xB5, 0xB5, 0xB5), Color.FromArgb(0x55, 0x56, 0x5C),
         Color.FromArgb(0x2A, 0x2A, 0x2E), Color.FromArgb(0xE8, 0x91, 0x3C), Color.FromArgb(0x8B, 0x5A, 0x3C),
+    };
+    static readonly Color[] NosePresets =
+    {
+        Color.FromArgb(202, 113, 159), Color.FromArgb(0xFF, 0x96, 0xB4), Color.FromArgb(0xE0, 0x52, 0x5A), Color.FromArgb(0xE8, 0x91, 0x3C),
+        Color.FromArgb(0x8B, 0x5A, 0x3C), Color.FromArgb(0x2A, 0x2A, 0x2E), Color.FromArgb(0xF0, 0xE2, 0xC2),
+    };
+    static readonly Color[] EarPresets =
+    {
+        Color.FromArgb(154, 135, 126), Color.FromArgb(202, 113, 159), Color.FromArgb(0xFF, 0x96, 0xB4), Color.FromArgb(0xE8, 0x91, 0x3C),
+        Color.FromArgb(0x8B, 0x5A, 0x3C), Color.FromArgb(0x2A, 0x2A, 0x2E), Color.FromArgb(0xF0, 0xE2, 0xC2),
     };
     static readonly Color[] EyePresets =
     {
@@ -60,12 +58,12 @@ sealed class SettingsForm : Form
     int devClicks;
     string updateNote = "";
     bool updating;
-    bool mixOpen = true;
+    bool mixOpen;   // the mixer starts collapsed
     readonly HashSet<int> mixCats = new();   // cats whose sounds are expanded in the mixer
     bool focusName = true;
     System.Windows.Forms.Timer? statsT;
     string page = Environment.GetCommandLineArgs().Contains("--cat") ? "cat0" : Environment.GetCommandLineArgs().Contains("--cat2") ? "cat1" : Environment.GetCommandLineArgs().Contains("--cat3") ? "cat2" : Environment.GetCommandLineArgs().Contains("--cats") ? "cats" : Environment.GetCommandLineArgs().Contains("--pets") ? "pets"
-        : Environment.GetCommandLineArgs().Contains("--credits") ? "credits" : "general";
+        : Environment.GetCommandLineArgs().Contains("--credits") ? "credits" : Environment.GetCommandLineArgs().Contains("--volumes") ? "volumes" : Environment.GetCommandLineArgs().Contains("--info") ? "info" : "general";
     int devTarget;   // the cat the developer buttons act on
 
     [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
@@ -211,7 +209,7 @@ sealed class SettingsForm : Form
         int keepScroll = bar.Value;
 
         int ny = P(84);
-        var nav = new List<(string id, string label)> { ("general", Str.T("nav.general")), ("pets", Str.T("nav.pets")) };
+        var nav = new List<(string id, string label)> { ("general", Str.T("nav.general")), ("volumes", Str.T("nav.volumes")), ("pets", Str.T("nav.pets")), ("info", Str.T("about")) };
         if (Cfg.Dev) nav.Add(("dev", Str.T("nav.dev")));
         foreach (var (id, label) in nav)
         {
@@ -228,14 +226,14 @@ sealed class SettingsForm : Form
         {
             y = Title(Str.T("nav.general"), pad, y, w);
 
-            // preferences: always on top, start with Windows, language (a drop-down), volume
+            // preferences: always on top, start with Windows, classic sprites, language (a drop-down)
             var pc = AddCard(pad, y, w);
             int py = P(4);
             py = ToggleRow(pc, "onTop", py + P(12), w - P(32), Cfg.OnTop, v => Cfg.SetOnTop(v));
             pc.Controls.Add(new Panel { Bounds = new Rectangle(P(16), py, w - P(32), 1), BackColor = line });
             py = ToggleRow(pc, "startup", py + P(12), w - P(32), Startup.Enabled, v => { try { Startup.Set(v); } catch { } });
             pc.Controls.Add(new Panel { Bounds = new Rectangle(P(16), py, w - P(32), 1), BackColor = line });
-            py = ToggleRow(pc, "autoupdate", py + P(12), w - P(32), Cfg.AutoUpdate, v => { Cfg.AutoUpdate = v; Cfg.Save(); });
+            py = ToggleRow(pc, "classic", py + P(12), w - P(32), Cfg.ClassicSprites, v => { Cfg.SetClassic(v); Build(); });
             pc.Controls.Add(new Panel { Bounds = new Rectangle(P(16), py, w - P(32), 1), BackColor = line });
             int ly = py + P(12);
             int lh = RowHeader(pc, Str.T("language"), Str.T("language.hint"), P(16), ly, w - P(32) - P(160));
@@ -251,10 +249,11 @@ sealed class SettingsForm : Form
             py = Math.Max(lh, ly + P(32)) + P(10);
             pc.Height = py + P(4);
             y += pc.Height + P(18);
-
+        }
+        else if (page == "volumes")
+        {
+            y = Title(Str.T("nav.volumes"), pad, y, w);
             // mixer: the master volume, expandable into each cat and each of its sounds
-            view.Controls.Add(Lbl(Str.T("mixer.title"), fBold, muted, pad + P(2), y, w));
-            y += P(28);
             var mc = AddCard(pad, y, w);
             int my = P(12), first = Cfg.Cats[0].Index, mx = P(16), mw = w - P(32);
             my = MixRow(mc, Str.T("mixer.master"), mx, my, mw, () => (int)Cfg.V["volume"], v => Cfg.V["volume"] = v, () => { mixOpen = !mixOpen; Build(); }, mixOpen, first, "mew");
@@ -271,23 +270,35 @@ sealed class SettingsForm : Form
                 }
             mc.Height = my;
             y += mc.Height + P(18);
-
-            view.Controls.Add(Lbl(Str.T("about"), fBold, muted, pad + P(2), y, w));
-            y += P(28);
+        }
+        else if (page == "info")
+        {
+            y = Title(Str.T("about"), pad, y, w);
             var about = AddCard(pad, y, w);
-            var verLbl = Lbl(Str.T("version"), fBold, text, P(16), P(14), w - P(200)); verLbl.BackColor = card; about.Controls.Add(verLbl);
-            var val = Lbl(Updater.Current.ToString(), fBold, accent, P(16) + w - P(32) - P(180), P(14), P(180), ContentAlignment.TopRight);
-            val.BackColor = card; about.Controls.Add(val);
-            var note = Lbl("", fSmall, muted, P(16), P(40), w - P(32)); note.BackColor = card; about.Controls.Add(note);
-            if (Cfg.Dev) note.Text = Str.T("dev.active");
-            var creditsBtn = new Pill(this) { Text = Str.T("about.creditsBtn"), Kind = PillKind.Seg, Bounds = new Rectangle(P(16), P(68), P(130), P(32)) };
-            creditsBtn.Click += (_, _) => { page = "credits"; bar.Value = 0; Build(); };
-            about.Controls.Add(creditsBtn);
+            int ay = P(4);
 
-            // updates: look for a newer release on GitHub, and install it on request
-            var updBtn = new Pill(this) { Text = Str.T("upd.check"), Kind = PillKind.Seg, Bounds = new Rectangle(P(16) + P(142), P(68), P(220), P(32)) };
-            var updNote = Lbl(updateNote != "" ? updateNote : Updater.Found is { } fu ? string.Format(Str.T("upd.avail"), fu.Tag) : "", fSmall, muted, P(16), P(108), w - P(32)); updNote.BackColor = card; about.Controls.Add(updNote);
-            if (Updater.Found != null) updBtn.Text = Str.T("upd.install");
+            // automatic check at start (installing is always manual)
+            ay = ToggleRow(about, "autoupdate", ay + P(12), w - P(32), Cfg.AutoUpdate, v => { Cfg.AutoUpdate = v; Cfg.Save(); });
+            about.Controls.Add(new Panel { Bounds = new Rectangle(P(16), ay, w - P(32), 1), BackColor = line });
+
+            // version (tap it 9 times, like a cat's lives, to unlock developer mode)
+            var verLbl = Lbl(Str.T("version"), fBold, text, P(16), ay + P(14), w - P(200)); verLbl.BackColor = card; about.Controls.Add(verLbl);
+            var val = Lbl(Updater.Current.ToString(), fBold, accent, P(16) + w - P(32) - P(180), ay + P(14), P(180), ContentAlignment.TopRight);
+            val.BackColor = card; about.Controls.Add(val);
+            var note = Lbl(Cfg.Dev ? Str.T("dev.active") : "", fSmall, muted, P(16), ay + P(40), w - P(32)); note.BackColor = card; about.Controls.Add(note);
+            val.Click += (_, _) =>
+            {
+                if (Cfg.Dev) return;
+                devClicks++;
+                if (devClicks >= 9) { Cfg.Dev = true; Cfg.Save(); devClicks = 0; page = "dev"; Build(); }
+                else if (devClicks >= 4) note.Text = string.Format(Str.T("dev.left"), 9 - devClicks);
+            };
+            ay += P(66);   // below the note (it is empty unless developer mode is on or being unlocked)
+            about.Controls.Add(new Panel { Bounds = new Rectangle(P(16), ay, w - P(32), 1), BackColor = line });
+
+            // look for a newer release on GitHub, and install it on request
+            var updBtn = new Pill(this) { Text = Updater.Found != null ? Str.T("upd.install") : Str.T("upd.check"), Kind = PillKind.Seg, Bounds = new Rectangle(P(16), ay + P(14), P(230), P(34)) };
+            var updNote = Lbl(updateNote != "" ? updateNote : Updater.Found is { } fu ? string.Format(Str.T("upd.avail"), fu.Tag) : "", fSmall, muted, P(16), ay + P(54), w - P(32)); updNote.BackColor = card; about.Controls.Add(updNote);
             updBtn.Click += async (_, _) =>
             {
                 if (updating) return;
@@ -312,15 +323,17 @@ sealed class SettingsForm : Form
                 if (!IsDisposed) updNote.Text = updateNote;
             };
             about.Controls.Add(updBtn);
-            about.Height = P(108) + updNote.Height + P(16);
-            // Tap the version 9 times (like a cat's lives) to unlock developer mode
-            val.Click += (_, _) =>
-            {
-                if (Cfg.Dev) return;
-                devClicks++;
-                if (devClicks >= 9) { Cfg.Dev = true; Cfg.Save(); devClicks = 0; page = "dev"; Build(); }
-                else if (devClicks >= 4) note.Text = string.Format(Str.T("dev.left"), 9 - devClicks);
-            };
+            ay += P(54) + updNote.Height + P(14);
+            about.Controls.Add(new Panel { Bounds = new Rectangle(P(16), ay, w - P(32), 1), BackColor = line });
+
+            // changelog (the release notes on GitHub) and credits
+            var logBtn = new Pill(this) { Text = Str.T("about.changelog"), Kind = PillKind.Seg, Bounds = new Rectangle(P(16), ay + P(14), P(150), P(34)) };
+            logBtn.Click += (_, _) => { try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Updater.ReleasesUrl) { UseShellExecute = true }); } catch { } };
+            about.Controls.Add(logBtn);
+            var creditsBtn = new Pill(this) { Text = Str.T("about.creditsBtn"), Kind = PillKind.Seg, Bounds = new Rectangle(P(16) + P(160), ay + P(14), P(150), P(34)) };
+            creditsBtn.Click += (_, _) => { page = "credits"; bar.Value = 0; Build(); };
+            about.Controls.Add(creditsBtn);
+            about.Height = ay + P(14) + P(34) + P(16);
         }
         else if (page == "credits")
         {
@@ -339,7 +352,7 @@ sealed class SettingsForm : Form
             cc.Height = cy2 + P(4);
             y += cc.Height + P(14);
             var back = new Pill(this) { Text = Str.T("credits.back"), Bounds = new Rectangle(pad, y + P(6), P(150), P(34)), Kind = PillKind.Outline };
-            back.Click += (_, _) => { page = "general"; bar.Value = 0; Build(); };
+            back.Click += (_, _) => { page = "info"; bar.Value = 0; Build(); };
             view.Controls.Add(back);
         }
         else if (page == "dev")
@@ -395,27 +408,7 @@ sealed class SettingsForm : Form
             statsT.Start();
             y += sc.Height + P(14);
 
-            // behaviour tuning (kept here for development, not part of the normal settings)
-            foreach (var group in new[] { "mouse", "movement" })
-            {
-                view.Controls.Add(Lbl(Str.T("group." + group), fBold, muted, pad + P(2), y, w));
-                y += P(28);
-                var tc = AddCard(pad, y, w);
-                int ty = P(4);
-                bool firstRow = true;
-                foreach (var f in Fields.Where(f => f.group == group))
-                {
-                    if (!firstRow) { tc.Controls.Add(new Panel { Bounds = new Rectangle(P(16), ty, w - P(32), 1), BackColor = line }); }
-                    firstRow = false;
-                    ty = SliderRow(tc, f, ty + P(12), w - P(32));
-                }
-                tc.Height = ty + P(4);
-                y += tc.Height + P(14);
-            }
-            var reset = new Pill(this) { Text = Str.T("reset"), Bounds = new Rectangle(pad, y + P(6), P(190), P(34)), Kind = PillKind.Outline };
-            reset.Click += (_, _) => { Cfg.ResetCat(); Build(); };
-            view.Controls.Add(reset);
-            var off = new Pill(this) { Text = Str.T("dev.disable"), Bounds = new Rectangle(pad + P(202), y + P(6), P(240), P(34)), Kind = PillKind.Outline };
+            var off = new Pill(this) { Text = Str.T("dev.disable"), Bounds = new Rectangle(pad, y + P(6), P(240), P(34)), Kind = PillKind.Outline };
             off.Click += (_, _) => { Cfg.Dev = false; Cfg.Save(); page = "general"; Build(); };
             view.Controls.Add(off);
         }
@@ -553,10 +546,15 @@ sealed class SettingsForm : Form
             lc.Controls.Add(new CatPreview(this, previewSheet) { Bounds = new Rectangle(P(16), P(16), P(170), P(136)) });
             int rx = P(16) + P(170) + P(18), ry = P(14);
             int rw = w - rx - P(16);
-            ry = ColorRow(lc, Str.T("look.fur1"), cat.Fur1, FurPresets, c => { cat.Fur1 = c; Cfg.Changed(cat); }, rx, ry, rw);
-            ry = ColorRow(lc, Str.T("look.fur2"), cat.Fur2, FurPresets, c => { cat.Fur2 = c; Cfg.Changed(cat); }, rx, ry, rw);
+            ry = ColorRow(lc, Str.T(Cfg.ClassicSprites ? "look.fur1" : "look.fur"), cat.Fur1, FurPresets, c => { cat.Fur1 = c; Cfg.Changed(cat); }, rx, ry, rw);
+            if (Cfg.ClassicSprites) ry = ColorRow(lc, Str.T("look.fur2"), cat.Fur2, FurPresets, c => { cat.Fur2 = c; Cfg.Changed(cat); }, rx, ry, rw);   // the new cat has one fur colour (its shades are derived)
             if (cat.Pattern != "none") ry = ColorRow(lc, Str.T("look.fur3"), cat.Fur3, FurPresets, c => { cat.Fur3 = c; Cfg.Changed(cat); }, rx, ry, rw);
             ry = ColorRow(lc, Str.T("look.eyes"), cat.Eyes, EyePresets, c => { cat.Eyes = c; Cfg.Changed(cat); }, rx, ry, rw);
+            if (!Cfg.ClassicSprites)
+            {
+                ry = ColorRow(lc, Str.T("look.nose"), cat.Nose, NosePresets, c => { cat.Nose = c; Cfg.Changed(cat); }, rx, ry, rw);
+                ry = ColorRow(lc, Str.T("look.ears"), cat.Ears, EarPresets, c => { cat.Ears = c; Cfg.Changed(cat); }, rx, ry, rw);
+            }
             lc.Height = Math.Max(P(16) * 2 + P(136), ry + P(6));
             y += lc.Height + P(14);
             view.Controls.Add(Lbl(Str.T("pattern.title"), fBold, muted, pad + P(2), y, w));
@@ -577,6 +575,33 @@ sealed class SettingsForm : Form
             }
             ptc.Height = P(62);
             y += ptc.Height + P(14);
+
+            if (!Cfg.ClassicSprites)   // accessories: only the new sprites have them
+            {
+                view.Controls.Add(Lbl(Str.T("acc.title"), fBold, muted, pad + P(2), y, w));
+                y += P(28);
+                var acc = AddCard(pad, y, w);
+                var ids = new List<string> { "" };
+                ids.AddRange(CatSprite.Accessories);
+                string AccName(string id) => id == "" ? Str.T("acc.none") : Str.T("acc." + id);
+                var accDrop = new Pill(this) { Text = AccName(cat.Accessory) + "  ▾", Kind = PillKind.Seg, Bounds = new Rectangle(P(16), P(14), w - P(32), P(36)) };
+                accDrop.Click += (_, _) =>
+                {
+                    var m = new ContextMenuStrip();
+                    foreach (var id in ids)
+                    {
+                        var aid = id;
+                        var it = new ToolStripMenuItem(AccName(aid)) { Checked = cat.Accessory == aid };
+                        it.Click += (_, _) => { cat.Accessory = aid; Cfg.Changed(cat); Build(); };
+                        m.Items.Add(it);
+                    }
+                    MenuRenderer.Apply(m);
+                    m.Show(accDrop, new Point(0, accDrop.Height + P(4)));
+                };
+                acc.Controls.Add(accDrop);
+                acc.Height = P(14) + P(36) + P(14);
+                y += acc.Height + P(14);
+            }
             var resetLook = new Pill(this) { Text = Str.T("look.reset"), Bounds = new Rectangle(pad, y + P(2), P(190), P(34)), Kind = PillKind.Outline };
             resetLook.Click += (_, _) => { cat.ResetLook(); Cfg.Changed(cat); Build(); };
             view.Controls.Add(resetLook);
@@ -637,7 +662,7 @@ sealed class SettingsForm : Form
         bar.Setup(view.Height, host.ClientSize.Height);
     }
 
-    bool NavActive(string id) => id == "pets" ? page.StartsWith("cat") : id == "general" ? page is "general" or "credits" : page == id;
+    bool NavActive(string id) => id == "pets" ? page.StartsWith("cat") : id == "info" ? page is "info" or "credits" : page == id;
 
     // makes a card (or any control with children) react to a click anywhere on it
     void Clickable(Card c, Action a)
@@ -711,21 +736,6 @@ sealed class SettingsForm : Form
         y += P(22);
         if (hint != "") { var h = Lbl(hint, fSmall, muted, x, y, w); h.BackColor = card; parent.Controls.Add(h); y += h.Height + P(4); }
         return y;
-    }
-
-    int SliderRow(Control parent, (string key, string group, double min, double max, double step, Func<double, string> fmt) f, int y, int w)
-    {
-        string unit = Str.T(f.key + ".unit");
-        var val = Lbl("", fBold, accent, P(16) + w - P(150), y, P(150), ContentAlignment.TopRight);
-        val.BackColor = card; parent.Controls.Add(val);
-        int cy = RowHeader(parent, Str.T(f.key + ".label"), Str.T(f.key + ".hint"), P(16), y, w - P(160));
-        void Show() => val.Text = $"{f.fmt(Cfg.V[f.key])} {unit}";
-        var s = new Slider(k) { Min = f.min, Max = f.max, Step = f.step, Value = Cfg.V[f.key], Track = track, Accent = accent, Back = card, Bounds = new Rectangle(P(16), cy, w, P(26)) };
-        s.Changed += () => { Cfg.V[f.key] = s.Value; Show(); };
-        s.Committed += () => { Cfg.Save(); if (f.key == "volume") { Audio.Refresh(); Audio.Play("mew"); } };   // volume: let the user hear it
-        Show();
-        parent.Controls.Add(s);
-        return cy + P(26) + P(10);
     }
 
     // One colour layer: its name, a row of preset chips and a "+" chip for any colour; returns the y of the next layer
@@ -1042,7 +1052,7 @@ sealed class SettingsForm : Form
                 g.FillPath(b, path);
             g.InterpolationMode = InterpolationMode.NearestNeighbor;
             g.PixelOffsetMode = PixelOffsetMode.Half;
-            var src = new Rectangle(7, 17, 17, 15);   // the sitting cat inside its 32x32 frame
+            var src = CatSprite.PreviewRect;   // the sitting cat inside its 32x32 frame
             int scale = Math.Max(1, Math.Min((Width - f.P(16)) / src.Width, (Height - f.P(12)) / src.Height));
             var dst = new Rectangle((Width - src.Width * scale) / 2, (Height - src.Height * scale) / 2, src.Width * scale, src.Height * scale);
             g.DrawImage(sheet, dst, src.X, src.Y, src.Width, src.Height, GraphicsUnit.Pixel);

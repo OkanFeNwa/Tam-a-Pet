@@ -6,9 +6,10 @@ sealed record Trait(string Key, double Activity, double Appetite, double Lazines
 
 static class Characters
 {
-    // How long each need lasts from full to empty, in minutes, for every character. The three always add up to 30:
+    // How long each need lasts from full to empty, in units of the balanced cat's time (10, 15 and 5 "minutes", which the
+    // cat doubles to 20, 30 and 10: see PetWindow), for every character. The three always add up to 30:
     // a character that is weak in one need makes up for it in another. The balanced cat is the reference (hunger 10,
-    // energy 15, happiness 5 min); a Trait stores the speed relative to it (10 / minutes, ...).
+    // energy 15, happiness 5); a Trait stores the speed relative to it (10 / minutes, ...).
     //                         activity  hunger energy happiness   pitch chatty
     static Trait T(string key, double activity, double hunger, double energy, double happiness, double pitch, double chatty, double needy = 0) =>
         new(key, activity, 10 / hunger, 15 / energy, 5 / happiness, pitch, chatty, needy);
@@ -32,13 +33,17 @@ sealed class CatProfile
     public readonly int Index;
     public string Name = "";
     public Color Fur1, Fur2, Eyes;
+    public Color Nose = CatSprite.DefaultNose, Ears = CatSprite.DefaultEars;   // new sprites: the pink nose and the inside of the ears
     public Color Fur3 = Color.FromArgb(0xE8, 0x91, 0x3C);   // the colour of the variant (stripes, patches)
+    public string Accessory = "";   // "" or one of CatSprite.Accessories (new sprites only)
     public string Pattern = "none";   // none | tabby | patches | calico
     public int Volume = 100, VoiceVol = 100, PurrVol = 100, FxVol = 100;   // this pet in the mixer: all of it, then its voice, purring and effects
     public Color BowlColor = Color.FromArgb(0xE0, 0x52, 0x5A), BedColor = Color.FromArgb(0x7F, 0x95, 0xF0), BallColor = Color.FromArgb(0xFF, 0x7A, 0x45);
     public string Character;
     public double Hunger = 100, Happiness = 100, Energy = 100;
     public string Monitor = "";   // where the pet (and its objects) live: "" = the main monitor, "free" = every monitor, or a monitor's device name
+    public const double BowlCapacity = 400;   // how much the bowl holds, in points of hunger
+    public double BowlFood = BowlCapacity;    // and how much is left
     public string Bowl = "", Bed = "", Ball = "";   // saved objects: "x" (bowl, bed) or "x,y" (ball); empty = not summoned
 
     public CatProfile(int index)
@@ -55,7 +60,7 @@ sealed class CatProfile
 
     public void ResetLook()
     {
-        Pattern = "none";
+        Pattern = "none"; Accessory = ""; Nose = CatSprite.DefaultNose; Ears = CatSprite.DefaultEars;
         if (Index == 0) { Fur1 = CatSprite.DefaultFur1; Fur2 = CatSprite.DefaultFur2; Eyes = CatSprite.DefaultEyes; }
         else
         {
@@ -80,6 +85,8 @@ static class Cfg
     };
     public static Dictionary<string, double> V = new(Defaults);
     public static string Lang = "en";   // English is the main language; the user can switch to Italian in the settings
+    public static bool ClassicSprites;   // the original sprite sheet instead of the new one (default)
+    public static void SetClassic(bool on) { ClassicSprites = on; Save(); foreach (var c in Cats.ToList()) ProfileChanged?.Invoke(c); }
     public static bool AutoUpdate = true;   // look for a newer release at start (installing it is always manual)
     public const int MaxCats = 8;
     public static readonly List<CatProfile> Cats = new() { new(0) };   // every cat the user has (each with its own window); the first one has Index 0
@@ -154,6 +161,7 @@ static class Cfg
             case "name": p.Name = val; break;
             case "stripes": if (val == "1" && p.Pattern == "none") p.Pattern = "tabby"; break;   // the first version of the patterns
             case "pattern": if (val is "none" or "tabby" or "patches" or "calico") p.Pattern = val; break;
+            case "acc": p.Accessory = CatSprite.Accessories.Contains(val) ? val : ""; break;
             case "fur3": if (Hex(val, out var c4)) p.Fur3 = c4; break;
             case "vol": case "volvoice": case "volpurr": case "volfx":
                 if (int.TryParse(val, out var vv)) { vv = Math.Clamp(vv, 0, 100); if (key == "vol") p.Volume = vv; else if (key == "volvoice") p.VoiceVol = vv; else if (key == "volpurr") p.PurrVol = vv; else p.FxVol = vv; }
@@ -162,6 +170,8 @@ static class Cfg
             case "fur1": if (Hex(val, out var c1)) p.Fur1 = c1; break;
             case "fur2": if (Hex(val, out var c2)) p.Fur2 = c2; break;
             case "eyes": if (Hex(val, out var c3)) p.Eyes = c3; break;
+            case "nose": if (Hex(val, out var c5)) p.Nose = c5; break;
+            case "ears": if (Hex(val, out var c6)) p.Ears = c6; break;
             case "bowlc": case "bowlbody": if (Hex(val, out var o1)) p.BowlColor = o1; break;
             case "bedc": case "bedouter": if (Hex(val, out var o2)) p.BedColor = o2; break;
             case "ballc": case "ballbody": if (Hex(val, out var o3)) p.BallColor = o3; break;
@@ -174,6 +184,7 @@ static class Cfg
                 break;
             case "monitor": p.Monitor = val; break;
             case "bowl": p.Bowl = val; break;
+            case "bowlfood": if (double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out var bf)) p.BowlFood = Math.Clamp(bf, 0, CatProfile.BowlCapacity); break;
             case "bed": p.Bed = val; break;
             case "ball": p.Ball = val; break;
         }
@@ -194,6 +205,7 @@ static class Cfg
                 else if (key == "onTop") OnTop = val != "0";
                 else if (key == "share") ShareObjects = val == "1";
                 else if (key == "autoupdate") AutoUpdate = val != "0";
+                else if (key == "classic") ClassicSprites = val == "1";
                 else if (key == "custom")
                 {
                     foreach (var hex in val.Split(',', StringSplitOptions.RemoveEmptyEntries))
@@ -233,6 +245,7 @@ static class Cfg
             lines.Add($"onTop={(OnTop ? 1 : 0)}");
             lines.Add($"share={(ShareObjects ? 1 : 0)}");
             lines.Add($"autoupdate={(AutoUpdate ? 1 : 0)}");
+            lines.Add($"classic={(ClassicSprites ? 1 : 0)}");
             if (Recent.Count > 0) lines.Add("custom=" + string.Join(",", Recent.Select(CatSprite.Hex)));
             foreach (var p in Cats)
             {
@@ -243,11 +256,14 @@ static class Cfg
                 lines.Add($"{k}fur2={CatSprite.Hex(p.Fur2)}");
                 lines.Add($"{k}pattern={p.Pattern}");
                 lines.Add($"{k}fur3={CatSprite.Hex(p.Fur3)}");
+                lines.Add($"{k}acc={p.Accessory}");
                 lines.Add($"{k}vol={p.Volume}");
                 lines.Add($"{k}volvoice={p.VoiceVol}");
                 lines.Add($"{k}volpurr={p.PurrVol}");
                 lines.Add($"{k}volfx={p.FxVol}");
                 lines.Add($"{k}eyes={CatSprite.Hex(p.Eyes)}");
+                lines.Add($"{k}nose={CatSprite.Hex(p.Nose)}");
+                lines.Add($"{k}ears={CatSprite.Hex(p.Ears)}");
                 lines.Add($"{k}bowlc={CatSprite.Hex(p.BowlColor)}");
                 lines.Add($"{k}bedc={CatSprite.Hex(p.BedColor)}");
                 lines.Add($"{k}ballc={CatSprite.Hex(p.BallColor)}");
@@ -256,6 +272,7 @@ static class Cfg
                 lines.Add($"{k}energy={D(p.Energy)}");
                 if (p.Monitor != "") lines.Add($"{k}monitor={p.Monitor}");
                 if (p.Bowl != "") lines.Add($"{k}bowl={p.Bowl}");
+                lines.Add($"{k}bowlfood={D(p.BowlFood)}");
                 if (p.Bed != "") lines.Add($"{k}bed={p.Bed}");
                 if (p.Ball != "") lines.Add($"{k}ball={p.Ball}");
             }
@@ -288,7 +305,7 @@ static class Str
         ["it"] = new()
         {
             ["nav.pets"] = "Pet", ["pets.intro"] = "Scegli il tipo di pet da gestire.", ["pets.cats"] = "Gatti", ["pets.count"] = "{0} nel desktop", ["cats.add"] = "Aggiungi gatto", ["cats.max"] = "Hai raggiunto il massimo di {0} gatti.", ["back.pets"] = "‹ Pet", ["back.cats"] = "‹ Gatti", ["cat.remove"] = "Rimuovi questo gatto", ["cat.remove.ask"] = "Rimuovere {0}? Le sue statistiche e i suoi oggetti andranno persi.", ["pattern.title"] = "Variante", ["pattern.none"] = "Nessuna", ["pattern.tabby"] = "Tigrato", ["pattern.patches"] = "A chiazze", ["pattern.calico"] = "Calico", ["look.fur3"] = "Colore della variante", ["mixer.title"] = "Mixer", ["mixer.master"] = "Volume generale", ["mixer.pet"] = "Volume del gatto", ["mix.voice"] = "Voce", ["mix.purr"] = "Fusa", ["mix.fx"] = "Effetti", ["cat.sound"] = "Volume", ["about"] = "Informazioni", ["upd.check"] = "Cerca aggiornamenti", ["autoupdate.label"] = "Cerca aggiornamenti in automatico", ["autoupdate.hint"] = "Controlla su GitHub all'avvio e ogni ora; scaricare e installare richiede sempre un tuo clic", ["upd.balloon"] = "Apri le Impostazioni per installarla.", ["upd.checking"] = "Controllo in corso...", ["upd.latest"] = "Hai l'ultima versione ({0}).", ["upd.avail"] = "Disponibile la versione {0}.", ["upd.install"] = "Scarica e installa", ["upd.installing"] = "Scarico l'aggiornamento...", ["upd.error"] = "Impossibile controllare gli aggiornamenti (nessuna connessione, o nessuna versione pubblicata).", ["version"] = "Versione", ["dev.left"] = "Ancora {0} click per la modalità sviluppatore", ["dev.on"] = "Modalità sviluppatore attivata", ["dev.active"] = "Modalità sviluppatore attiva", ["nav.dev"] = "Sviluppatore", ["dev.intro"] = "Funzioni in anteprima e strumenti di debug.", ["dev.empty"] = "Per ora non c'è niente qui.", ["dev.disable"] = "Disattiva modalità sviluppatore",
-            ["dev.actions"] = "Interazioni del gatto", ["dev.state"] = "Stato", ["dev.stats.fmt"] = "Fame {0} · Felicità {1} · Energia {2} · stato: {3}", ["act.idle"] = "Idle", ["act.lick"] = "Leccata", ["act.walk"] = "Cammina", ["act.run"] = "Corri", ["act.sleep"] = "Dormi / sveglia", ["act.play"] = "Gioca (click)", ["act.pounce"] = "Salto", ["act.frenzy"] = "Frenesia", ["act.groom"] = "Si leccano", ["act.fight"] = "Litigano", ["share.label"] = "Oggetti condivisi", ["share.hint"] = "Tutti i gatti usano la stessa ciotola, cuccia e pallina (quelli del primo gatto). Gli oggetti degli altri gatti vengono rimossi.", ["objs.shared"] = "Gli oggetti sono condivisi: si gestiscono dalla scheda di {0}.",
+            ["dev.actions"] = "Interazioni del gatto", ["dev.state"] = "Stato", ["dev.stats.fmt"] = "Fame {0} · Felicità {1} · Energia {2} · stato: {3}", ["act.idle"] = "Idle", ["act.lick"] = "Leccata", ["act.walk"] = "Cammina", ["act.run"] = "Corri", ["act.sleep"] = "Dormi / sveglia", ["act.play"] = "Gioca (click)", ["act.pounce"] = "Salto", ["act.frenzy"] = "Frenesia", ["act.groom"] = "Si leccano", ["act.fight"] = "Litigano", ["nav.volumes"] = "Volumi", ["about.changelog"] = "Changelog", ["bowl.refill"] = "Riempi la ciotola", ["look.nose"] = "Naso", ["look.ears"] = "Orecchie", ["acc.title"] = "Accessori", ["acc.none"] = "Nessuno", ["look.fur"] = "Pelo", ["classic.label"] = "Sprite classici", ["classic.hint"] = "Usa i vecchi sprite dei gatti al posto dei nuovi (gli accessori funzionano solo con i nuovi)", ["acc.bow-red"] = "Fiocco rosso", ["acc.bow-pink"] = "Fiocco rosa", ["acc.bow-gold"] = "Fiocco oro", ["acc.bow2-blue"] = "Fiocco blu", ["acc.bow2-green"] = "Fiocco verde", ["acc.bow2-pink"] = "Fiocco rosa 2", ["acc.glasses-red"] = "Occhiali rossi", ["acc.glasses-gold"] = "Occhiali oro", ["acc.halo"] = "Aureola", ["acc.wings"] = "Ali", ["acc.cupid"] = "Cupido", ["acc.santa-1"] = "Natale 1", ["acc.santa-2"] = "Natale 2", ["acc.antlers-red"] = "Renna rossa", ["acc.antlers-green"] = "Renna verde", ["share.label"] = "Oggetti condivisi", ["share.hint"] = "Tutti i gatti usano la stessa ciotola, cuccia e pallina (quelli del primo gatto). Gli oggetti degli altri gatti vengono rimossi.", ["objs.shared"] = "Gli oggetti sono condivisi: si gestiscono dalla scheda di {0}.",
             ["menu.objects"] = "Oggetti", ["menu.bowl"] = "Ciotola", ["menu.bed"] = "Cuccia", ["menu.ball"] = "Pallina", ["menu.remove"] = "Rimuovi", ["name.label"] = "Nome del gatto", ["name.hint"] = "Compare sopra le barre delle statistiche",
             ["act.bowl"] = "Ciotola on/off", ["act.bed"] = "Cuccia on/off", ["act.ball"] = "Pallina on/off",
             ["act.hungry"] = "Ha fame", ["act.sad"] = "È triste", ["act.tired"] = "Ha sonno",
@@ -317,7 +334,7 @@ static class Str
         ["en"] = new()
         {
             ["nav.pets"] = "Pets", ["pets.intro"] = "Choose the kind of pet to manage.", ["pets.cats"] = "Cats", ["pets.count"] = "{0} on the desktop", ["cats.add"] = "Add a cat", ["cats.max"] = "You have reached the limit of {0} cats.", ["back.pets"] = "‹ Pets", ["back.cats"] = "‹ Cats", ["cat.remove"] = "Remove this cat", ["cat.remove.ask"] = "Remove {0}? Its stats and objects will be lost.", ["pattern.title"] = "Variant", ["pattern.none"] = "None", ["pattern.tabby"] = "Tabby", ["pattern.patches"] = "Patched", ["pattern.calico"] = "Calico", ["look.fur3"] = "Variant colour", ["mixer.title"] = "Mixer", ["mixer.master"] = "Master volume", ["mixer.pet"] = "Cat volume", ["mix.voice"] = "Voice", ["mix.purr"] = "Purring", ["mix.fx"] = "Effects", ["cat.sound"] = "Volume", ["about"] = "About", ["upd.check"] = "Check for updates", ["autoupdate.label"] = "Check for updates automatically", ["autoupdate.hint"] = "Looks on GitHub at start and every hour; downloading and installing always needs your click", ["upd.balloon"] = "Open Settings to install it.", ["upd.checking"] = "Checking...", ["upd.latest"] = "You have the latest version ({0}).", ["upd.avail"] = "Version {0} is available.", ["upd.install"] = "Download and install", ["upd.installing"] = "Downloading the update...", ["upd.error"] = "Could not check for updates (no connection, or no published release).", ["version"] = "Version", ["dev.left"] = "{0} more clicks to enable developer mode", ["dev.on"] = "Developer mode enabled", ["dev.active"] = "Developer mode is on", ["nav.dev"] = "Developer", ["dev.intro"] = "Preview features and debug tools.", ["dev.empty"] = "Nothing here yet.", ["dev.disable"] = "Turn off developer mode",
-            ["dev.actions"] = "Cat interactions", ["dev.state"] = "State", ["dev.stats.fmt"] = "Hunger {0} · Happiness {1} · Energy {2} · state: {3}", ["act.idle"] = "Idle", ["act.lick"] = "Lick", ["act.walk"] = "Walk", ["act.run"] = "Run", ["act.sleep"] = "Sleep / wake", ["act.play"] = "Play (click)", ["act.pounce"] = "Jump", ["act.frenzy"] = "Frenzy", ["act.groom"] = "Groom each other", ["act.fight"] = "Fight", ["share.label"] = "Shared objects", ["share.hint"] = "All cats use the same bowl, bed and ball (those of the first cat). The objects of the other cats are removed.", ["objs.shared"] = "The objects are shared: manage them from the page of {0}.",
+            ["dev.actions"] = "Cat interactions", ["dev.state"] = "State", ["dev.stats.fmt"] = "Hunger {0} · Happiness {1} · Energy {2} · state: {3}", ["act.idle"] = "Idle", ["act.lick"] = "Lick", ["act.walk"] = "Walk", ["act.run"] = "Run", ["act.sleep"] = "Sleep / wake", ["act.play"] = "Play (click)", ["act.pounce"] = "Jump", ["act.frenzy"] = "Frenzy", ["act.groom"] = "Groom each other", ["act.fight"] = "Fight", ["nav.volumes"] = "Volumes", ["about.changelog"] = "Changelog", ["bowl.refill"] = "Refill the bowl", ["look.nose"] = "Nose", ["look.ears"] = "Ears", ["acc.title"] = "Accessories", ["acc.none"] = "None", ["look.fur"] = "Fur", ["classic.label"] = "Classic sprites", ["classic.hint"] = "Use the original cat sprites instead of the new ones (accessories only work with the new ones)", ["acc.bow-red"] = "Red bow", ["acc.bow-pink"] = "Pink bow", ["acc.bow-gold"] = "Gold bow", ["acc.bow2-blue"] = "Blue bow", ["acc.bow2-green"] = "Green bow", ["acc.bow2-pink"] = "Pink bow 2", ["acc.glasses-red"] = "Red glasses", ["acc.glasses-gold"] = "Gold glasses", ["acc.halo"] = "Halo", ["acc.wings"] = "Wings", ["acc.cupid"] = "Cupid", ["acc.santa-1"] = "Santa hat 1", ["acc.santa-2"] = "Santa hat 2", ["acc.antlers-red"] = "Red antlers", ["acc.antlers-green"] = "Green antlers", ["share.label"] = "Shared objects", ["share.hint"] = "All cats use the same bowl, bed and ball (those of the first cat). The objects of the other cats are removed.", ["objs.shared"] = "The objects are shared: manage them from the page of {0}.",
             ["menu.objects"] = "Objects", ["menu.bowl"] = "Bowl", ["menu.bed"] = "Bed", ["menu.ball"] = "Ball", ["menu.remove"] = "Remove", ["name.label"] = "Cat name", ["name.hint"] = "Shown above the stat bars",
             ["act.bowl"] = "Bowl on/off", ["act.bed"] = "Bed on/off", ["act.ball"] = "Ball on/off",
             ["act.hungry"] = "Make hungry", ["act.sad"] = "Make sad", ["act.tired"] = "Make tired",
@@ -354,7 +371,7 @@ static class Str
             ["dev.on"] = "Mode développeur activé", ["dev.active"] = "Le mode développeur est activé", ["nav.dev"] = "Développeur", ["dev.intro"] = "Fonctions en avant-première et outils de débogage.", ["dev.empty"] = "Rien ici pour le moment.", ["dev.disable"] = "Désactiver le mode développeur",
             ["dev.actions"] = "Interactions du chat", ["dev.state"] = "État", ["dev.stats.fmt"] = "Faim {0} · Bonheur {1} · Énergie {2} · état : {3}", ["act.idle"] = "Repos", ["act.lick"] = "Léchage", ["act.walk"] = "Marche",
             ["act.run"] = "Course", ["act.sleep"] = "Dormir / réveiller", ["act.play"] = "Jouer (clic)", ["act.pounce"] = "Saut", ["act.frenzy"] = "Colère", ["act.groom"] = "Se toiletter mutuellement",
-            ["act.fight"] = "Se battre", ["share.label"] = "Objets partagés", ["share.hint"] = "Tous les chats utilisent la même gamelle, le même lit et la même balle (ceux du premier chat). Les objets des autres chats sont supprimés.", ["objs.shared"] = "Les objets sont partagés : gérez-les depuis la page de {0}.", ["menu.objects"] = "Objets", ["menu.bowl"] = "Gamelle",
+            ["act.fight"] = "Se battre", ["nav.volumes"] = "Volumes", ["about.changelog"] = "Journal des modifications", ["bowl.refill"] = "Remplir la gamelle", ["look.nose"] = "Nez", ["look.ears"] = "Oreilles", ["acc.title"] = "Accessoires", ["acc.none"] = "Aucun", ["look.fur"] = "Pelage", ["classic.label"] = "Sprites classiques", ["classic.hint"] = "Utilise les sprites d'origine des chats au lieu des nouveaux (les accessoires ne fonctionnent qu'avec les nouveaux)", ["acc.bow-red"] = "Nœud rouge", ["acc.bow-pink"] = "Nœud rose", ["acc.bow-gold"] = "Nœud doré", ["acc.bow2-blue"] = "Nœud bleu", ["acc.bow2-green"] = "Nœud vert", ["acc.bow2-pink"] = "Nœud rose 2", ["acc.glasses-red"] = "Lunettes rouges", ["acc.glasses-gold"] = "Lunettes dorées", ["acc.halo"] = "Auréole", ["acc.wings"] = "Ailes", ["acc.cupid"] = "Cupidon", ["acc.santa-1"] = "Bonnet 1", ["acc.santa-2"] = "Bonnet 2", ["acc.antlers-red"] = "Renne rouge", ["acc.antlers-green"] = "Renne verte", ["share.label"] = "Objets partagés", ["share.hint"] = "Tous les chats utilisent la même gamelle, le même lit et la même balle (ceux du premier chat). Les objets des autres chats sont supprimés.", ["objs.shared"] = "Les objets sont partagés : gérez-les depuis la page de {0}.", ["menu.objects"] = "Objets", ["menu.bowl"] = "Gamelle",
             ["menu.bed"] = "Lit", ["menu.ball"] = "Balle", ["menu.remove"] = "Retirer", ["name.label"] = "Nom du chat", ["name.hint"] = "Affiché au-dessus des barres de statistiques", ["act.bowl"] = "Gamelle oui/non",
             ["act.bed"] = "Lit oui/non", ["act.ball"] = "Balle oui/non", ["act.hungry"] = "Donner faim", ["act.sad"] = "Rendre triste", ["act.tired"] = "Fatiguer", ["onTop.label"] = "Toujours au premier plan",
             ["onTop.hint"] = "Le chat reste au-dessus des autres fenêtres", ["startup.label"] = "Lancer avec Windows", ["startup.hint"] = "Ouvre le chat à l'ouverture de session", ["volume.label"] = "Volume", ["volume.hint"] = "Miaulements et autres sons du chat (0 = muet)", ["volume.unit"] = "%",
@@ -385,7 +402,7 @@ static class Str
             ["dev.on"] = "Modo desarrollador activado", ["dev.active"] = "El modo desarrollador está activado", ["nav.dev"] = "Desarrollador", ["dev.intro"] = "Funciones en vista previa y herramientas de depuración.", ["dev.empty"] = "Aún no hay nada aquí.", ["dev.disable"] = "Desactivar el modo desarrollador",
             ["dev.actions"] = "Interacciones del gato", ["dev.state"] = "Estado", ["dev.stats.fmt"] = "Hambre {0} · Felicidad {1} · Energía {2} · estado: {3}", ["act.idle"] = "Reposo", ["act.lick"] = "Lamer", ["act.walk"] = "Caminar",
             ["act.run"] = "Correr", ["act.sleep"] = "Dormir / despertar", ["act.play"] = "Jugar (clic)", ["act.pounce"] = "Salto", ["act.frenzy"] = "Furia", ["act.groom"] = "Acicalarse mutuamente",
-            ["act.fight"] = "Pelear", ["share.label"] = "Objetos compartidos", ["share.hint"] = "Todos los gatos usan el mismo cuenco, la misma cama y la misma pelota (los del primer gato). Los objetos de los demás gatos se eliminan.", ["objs.shared"] = "Los objetos son compartidos: gestiónalos desde la página de {0}.", ["menu.objects"] = "Objetos", ["menu.bowl"] = "Cuenco",
+            ["act.fight"] = "Pelear", ["nav.volumes"] = "Volúmenes", ["about.changelog"] = "Registro de cambios", ["bowl.refill"] = "Rellenar el cuenco", ["look.nose"] = "Nariz", ["look.ears"] = "Orejas", ["acc.title"] = "Accesorios", ["acc.none"] = "Ninguno", ["look.fur"] = "Pelaje", ["classic.label"] = "Sprites clásicos", ["classic.hint"] = "Usa los sprites originales de los gatos en lugar de los nuevos (los accesorios solo funcionan con los nuevos)", ["acc.bow-red"] = "Lazo rojo", ["acc.bow-pink"] = "Lazo rosa", ["acc.bow-gold"] = "Lazo dorado", ["acc.bow2-blue"] = "Lazo azul", ["acc.bow2-green"] = "Lazo verde", ["acc.bow2-pink"] = "Lazo rosa 2", ["acc.glasses-red"] = "Gafas rojas", ["acc.glasses-gold"] = "Gafas doradas", ["acc.halo"] = "Aureola", ["acc.wings"] = "Alas", ["acc.cupid"] = "Cupido", ["acc.santa-1"] = "Gorro 1", ["acc.santa-2"] = "Gorro 2", ["acc.antlers-red"] = "Reno rojo", ["acc.antlers-green"] = "Reno verde", ["share.label"] = "Objetos compartidos", ["share.hint"] = "Todos los gatos usan el mismo cuenco, la misma cama y la misma pelota (los del primer gato). Los objetos de los demás gatos se eliminan.", ["objs.shared"] = "Los objetos son compartidos: gestiónalos desde la página de {0}.", ["menu.objects"] = "Objetos", ["menu.bowl"] = "Cuenco",
             ["menu.bed"] = "Cama", ["menu.ball"] = "Pelota", ["menu.remove"] = "Quitar", ["name.label"] = "Nombre del gato", ["name.hint"] = "Se muestra sobre las barras de estadísticas", ["act.bowl"] = "Cuenco sí/no",
             ["act.bed"] = "Cama sí/no", ["act.ball"] = "Pelota sí/no", ["act.hungry"] = "Dar hambre", ["act.sad"] = "Poner triste", ["act.tired"] = "Cansar", ["onTop.label"] = "Siempre en primer plano",
             ["onTop.hint"] = "El gato se queda por encima de las demás ventanas", ["startup.label"] = "Iniciar con Windows", ["startup.hint"] = "Abre el gato al iniciar sesión", ["volume.label"] = "Volumen", ["volume.hint"] = "Maullidos y otros sonidos del gato (0 = silencio)", ["volume.unit"] = "%",
