@@ -10,11 +10,13 @@ static class Cfg
     };
     public static Dictionary<string, double> V = new(Defaults);
     public static string Lang = "it";
+    public static string Bowl = "", Bed = "", Ball = "";   // saved objects: "x" (bowl, bed) or "x,y" (ball); empty = not summoned
     public static bool OnTop = true;   // keep the cat above other windows
     public static string Name = "";   // the cat's name
     public static bool Dev;   // developer mode, unlocked from the version label in settings
 
-    static string FilePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Tam-a-Pet", "settings.ini");
+    // TAMAPET_DIR overrides the folder (used by tests so they never touch the real settings)
+    static string FilePath => Path.Combine(Environment.GetEnvironmentVariable("TAMAPET_DIR") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Tam-a-Pet"), "settings.ini");
 
     public static double NearRange => V["nearRange"];
     public static double JumpRange => V["jumpRange"];
@@ -41,6 +43,9 @@ static class Cfg
                 else if (kv[0] == "dev") Dev = kv[1] == "1";
                 else if (kv[0] == "onTop") OnTop = kv[1] != "0";
                 else if (kv[0] == "name") Name = kv[1];
+                else if (kv[0] == "bowl") Bowl = kv[1];
+                else if (kv[0] == "bed") Bed = kv[1];
+                else if (kv[0] == "ball") Ball = kv[1];
                 else if (V.ContainsKey(kv[0]) && double.TryParse(kv[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var d)) V[kv[0]] = d;
             }
         }
@@ -53,7 +58,7 @@ static class Cfg
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-            File.WriteAllLines(FilePath, V.Select(p => $"{p.Key}={p.Value.ToString(CultureInfo.InvariantCulture)}").Append($"lang={Lang}").Append($"dev={(Dev ? 1 : 0)}").Append($"onTop={(OnTop ? 1 : 0)}").Append($"name={Name.Replace('\n', ' ').Replace('\r', ' ')}"));
+            File.WriteAllLines(FilePath, V.Select(p => $"{p.Key}={p.Value.ToString(CultureInfo.InvariantCulture)}").Append($"lang={Lang}").Append($"dev={(Dev ? 1 : 0)}").Append($"onTop={(OnTop ? 1 : 0)}").Concat(new[] { Bowl != "" ? $"bowl={Bowl}" : null, Bed != "" ? $"bed={Bed}" : null, Ball != "" ? $"ball={Ball}" : null }.OfType<string>()).Append($"name={Name.Replace('\n', ' ').Replace('\r', ' ')}"));
         }
         catch { }
     }
