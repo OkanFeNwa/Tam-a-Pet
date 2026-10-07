@@ -5,25 +5,41 @@ using System.Windows.Forms;
 // Pixel art helper: art strings with a generated 1px outline (palette key '#').
 static class PixelArt
 {
-    public static Bitmap Render(string[] art, Dictionary<char, Color> pal, int u)
+    public static Bitmap Render(string[] art, Dictionary<char, Color> pal, int u, bool outline = true)
     {
         int h = art.Length, w = art.Max(r => r.Length);
+        int o = outline ? 1 : 0;   // art that already contains its own outline gets none added
         bool Solid(int x, int y) => x >= 0 && y >= 0 && y < h && x < art[y].Length && art[y][x] != '.';
-        var bmp = new Bitmap((w + 2) * u, (h + 2) * u, PixelFormat.Format32bppPArgb);
+        var bmp = new Bitmap((w + 2 * o) * u, (h + 2 * o) * u, PixelFormat.Format32bppPArgb);
         using var g = System.Drawing.Graphics.FromImage(bmp);
         g.Clear(Color.Transparent);
-        for (int y = -1; y <= h; y++)
-            for (int x = -1; x <= w; x++)
+        for (int y = -o; y < h + o; y++)
+            for (int x = -o; x < w + o; x++)
             {
                 Color c;
                 if (Solid(x, y)) c = pal[art[y][x]];
-                else if (Solid(x - 1, y) || Solid(x + 1, y) || Solid(x, y - 1) || Solid(x, y + 1)) c = pal['#'];
+                else if (outline && (Solid(x - 1, y) || Solid(x + 1, y) || Solid(x, y - 1) || Solid(x, y + 1))) c = pal['#'];
                 else continue;
                 using var b = new SolidBrush(c);
-                g.FillRectangle(b, (x + 1) * u, (y + 1) * u, u, u);
+                g.FillRectangle(b, (x + o) * u, (y + o) * u, u, u);
             }
         return bmp;
     }
+
+    // A little heart (floats up while the cat is petted, like the z's of sleep)
+    public static readonly string[] HeartArt =
+    {
+        ".oo.oo.",
+        "ohooooo",
+        "ooooooo",
+        ".ooooo.",
+        "..ooo..",
+        "...o...",
+    };
+    public static readonly Dictionary<char, Color> HeartPal = new()
+    {
+        ['o'] = Color.FromArgb(0xFF, 0x5C, 0x8A), ['h'] = Color.FromArgb(0xFF, 0xB0, 0xC8), ['#'] = Color.FromArgb(0x7A, 0x14, 0x34),
+    };
 
     public static readonly string[] Bowl =
     {
@@ -34,11 +50,19 @@ static class PixelArt
         ".rrrrrrrrrr.",
         "..bbbbbbbb..",
     };
-    public static readonly Dictionary<char, Color> BowlPal = new()
+    // Palettes are derived from the owner's colours: lighter/darker variants give the pixel-art shading
+    public static Color Mix(Color a, Color b, double t) =>
+        Color.FromArgb((int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
+    public static Color Lighter(Color c, double t) => Mix(c, Color.White, t);
+    public static Color Darker(Color c, double t) => Mix(c, Color.Black, t);
+
+    static readonly Color Food = Color.FromArgb(0x8A, 0x5A, 0x32);   // the food never changes colour
+
+    public static Dictionary<char, Color> BowlPal(Color body) => new()
     {
-        ['f'] = Color.FromArgb(0x8a, 0x5a, 0x32), ['F'] = Color.FromArgb(0xb3, 0x7a, 0x45),
-        ['R'] = Color.FromArgb(0xf0, 0x7c, 0x82), ['r'] = Color.FromArgb(0xe0, 0x52, 0x5a),
-        ['b'] = Color.FromArgb(0x9a, 0x34, 0x3c), ['#'] = Color.FromArgb(0x3a, 0x12, 0x16),
+        ['f'] = Food, ['F'] = Lighter(Food, 0.3),
+        ['R'] = Lighter(body, 0.3), ['r'] = body,
+        ['b'] = Darker(body, 0.3), ['#'] = Darker(body, 0.75),
     };
 
     public static readonly string[] Bed =
@@ -51,35 +75,65 @@ static class PixelArt
         ".mmmmmmmmmmmmmmmmmmm.",
         "..ddddddddddddddddd..",
     };
-    public static readonly Dictionary<char, Color> BedPal = new()
+    public static Dictionary<char, Color> BedPal(Color outer) => new()
     {
-        ['l'] = Color.FromArgb(0xc4, 0xd0, 0xff), ['m'] = Color.FromArgb(0x7f, 0x95, 0xf0), ['c'] = Color.FromArgb(0xb9, 0xc6, 0xff),
-        ['d'] = Color.FromArgb(0x4a, 0x58, 0xa8), ['#'] = Color.FromArgb(0x1c, 0x22, 0x4a),
+        ['l'] = Lighter(outer, 0.4), ['m'] = outer, ['c'] = Lighter(outer, 0.45),
+        ['d'] = Darker(outer, 0.4), ['#'] = Darker(outer, 0.75),
     };
 
-    public static readonly string[] BallArt =
+    // The ball: a 6x6 pixel circle (the ring comes from the user's SVG, '#' = ring), filled in and shaded here:
+    // highlight at the top left, shadow at the bottom right. 'k' is the ring colour.
+    static readonly string[] BallRing =
     {
-        "..oooo..",
-        ".hhooooo",
-        "hhooooos",
-        "hooooosS",
-        "ooooossS",
-        "oooosssS",
-        ".ooSSSS.",
-        "..SSSS..",
+        ".####.",
+        "##..##",
+        "#....#",
+        "#....#",
+        "##..##",
+        ".####.",
     };
-    public static readonly Dictionary<char, Color> BallPal = new()
+
+    public static readonly string[] BallArt = MakeBall();
+
+    static string[] MakeBall()
     {
-        ['o'] = Color.FromArgb(0xff, 0x7a, 0x45), ['h'] = Color.FromArgb(0xff, 0xc2, 0xa0), ['s'] = Color.FromArgb(0xe0, 0x5a, 0x2a),
-        ['S'] = Color.FromArgb(0xb8, 0x3f, 0x18), ['#'] = Color.FromArgb(0x5a, 0x24, 0x10),
+        int n = BallRing.Length;
+        double c = n / 2.0, r = n / 2.0;
+        var rows = new string[n];
+        for (int y = 0; y < n; y++)
+        {
+            string ring = BallRing[y];
+            int first = ring.IndexOf('#'), last = ring.LastIndexOf('#');
+            var row = new char[n];
+            for (int x = 0; x < n; x++)
+            {
+                if (ring[x] == '#') { row[x] = 'k'; continue; }
+                if (x < first || x > last) { row[x] = '.'; continue; }   // outside the ring
+                double dx = x + 0.5 - c, dy = y + 0.5 - c;
+                double light = -(dx + dy) * 0.7071 / r;                    // 1 = facing the light (top left), -1 = away
+                row[x] = light > 0.3 ? 'h' : light < -0.3 ? 'S' : light < -0.05 ? 's' : 'o';
+            }
+            rows[y] = new string(row);
+        }
+        return rows;
+    }
+
+    public static Dictionary<char, Color> BallPal(Color body) => new()
+    {
+        ['o'] = body, ['h'] = Lighter(body, 0.45), ['s'] = Darker(body, 0.15), ['S'] = Darker(body, 0.3), ['k'] = Darker(body, 0.55),
     };
+
+    // The three objects in one colour (every other shade is derived from it)
+    public static Bitmap BowlImage(int u, Color c) => Render(Bowl, BowlPal(c), u);
+    public static Bitmap BedImage(int u, Color c) => Render(Bed, BedPal(c), u);
+    public static Bitmap BallImage(int u, Color c) => Render(BallArt, BallPal(c), u, outline: false);
 }
 
 // A little object living in its own click-through-where-transparent window (bowl, bed, ball).
 // Left-drag moves it, right-click offers "remove".
 abstract class PropWindow : Form
 {
-    protected readonly Bitmap img;
+    protected Bitmap img;
     readonly ContextMenuStrip menu = new();
     bool dragging;
     Point grab;
@@ -108,6 +162,16 @@ abstract class PropWindow : Form
     {
         if (m.Msg == 0x21) { m.Result = (IntPtr)3; return; }   // WM_MOUSEACTIVATE -> MA_NOACTIVATE
         base.WndProc(ref m);
+    }
+
+    public abstract void Recolor();   // redraw in the colours currently chosen
+
+    protected void SetImage(Bitmap b)
+    {
+        var old = img;
+        img = b;
+        if (IsHandleCreated) Native.PushBitmap(Handle, img, Left, Top);
+        old.Dispose();
     }
 
     public Point Center => new(Left + Width / 2, Top + Height / 2);
@@ -166,9 +230,17 @@ sealed class TaskbarProp : PropWindow
 
     protected override void OnDrop() => RaisePlaced();
 
-    public TaskbarProp(bool bed, int u) : base(bed ? PixelArt.Render(PixelArt.Bed, PixelArt.BedPal, u) : PixelArt.Render(PixelArt.Bowl, PixelArt.BowlPal, u))
+    readonly int u;
+
+    readonly CatProfile cat;   // the cat this object belongs to (its colour)
+
+    public override void Recolor() => SetImage(IsBed ? PixelArt.BedImage(u, cat.BedColor) : PixelArt.BowlImage(u, cat.BowlColor));
+
+    public TaskbarProp(bool bed, int u, CatProfile owner) : base(bed ? PixelArt.BedImage(u, owner.BedColor) : PixelArt.BowlImage(u, owner.BowlColor))
     {
         IsBed = bed;
+        this.u = u;
+        cat = owner;
     }
 
     static Rectangle Area(Point near) => Screens.WorkAreaAt(near.X, near.Y);
@@ -197,6 +269,7 @@ sealed class BallWindow : PropWindow
     bool held;
 
     const double Restitution = 0.78;
+    double BounceMin => 130 * S;   // below this impact speed on the floor the ball just rolls (a late timer tick can add ~100 px/s of gravity)
 
     public event Action<double>? Bounced;   // hit a wall or the floor: argument = loudness 0.35..1 from the impact speed
     long lastBounceAt, waAt;
@@ -205,13 +278,21 @@ sealed class BallWindow : PropWindow
     void Bounce(double speed)
     {
         long now = Environment.TickCount64;
-        if (speed < 40 * S) return;   // below this it is just resting on the floor (gravity jitter), not a bounce
-        Bounced?.Invoke(Math.Clamp(speed / (900 * S), 0.5, 1));
+        if (speed < 40 * S) return;   // too soft to hear
+        Bounced?.Invoke(Math.Clamp(speed / (900 * S), 0.65, 1));
     }
 
-    public BallWindow(int u, float scale) : base(PixelArt.Render(PixelArt.BallArt, PixelArt.BallPal, u))
+    readonly int u;
+
+    readonly CatProfile cat;
+
+    public override void Recolor() => SetImage(PixelArt.BallImage(u, cat.BallColor));
+
+    public BallWindow(int u, float scale, CatProfile owner) : base(PixelArt.BallImage(u, owner.BallColor))
     {
         S = scale;
+        this.u = u;
+        cat = owner;
         physT.Tick += (_, _) => Step();
     }
 
@@ -275,9 +356,14 @@ sealed class BallWindow : PropWindow
         if (y >= bottom)
         {
             y = bottom; floor = true;
-            Bounce(Math.Abs(vy));
-            vy = -vy * Restitution;
-            if (Math.Abs(vy) < 120 * S) vy = 0;
+            double inSpeed = Math.Abs(vy);
+            if (inSpeed >= BounceMin)
+            {
+                Bounce(inSpeed);                  // a real bounce
+                vy = -vy * Restitution;
+                if (Math.Abs(vy) < BounceMin) vy = 0;
+            }
+            else vy = 0;                          // resting or rolling: gravity jitter, no sound
         }
         if (floor && vy == 0) vx *= Math.Max(0, 1 - 2.5 * dt);   // rolling friction
         Location = new Point((int)Math.Round(x), (int)Math.Round(y));

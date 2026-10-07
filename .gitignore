@@ -2,3 +2,4 @@ node_modules/
 native/bin/
 native/obj/
 *.lnk
+native/dist/

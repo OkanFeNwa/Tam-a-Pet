@@ -20,6 +20,7 @@ sealed class StatsWindow : Form
     static readonly string[] Keys = { "stat.hunger", "stat.happiness", "stat.energy" };
 
     readonly float S;
+    readonly CatProfile profile;   // whose needs (and name) it shows
     Size panel;
     readonly System.Windows.Forms.Timer fadeT = new() { Interval = 16 };
     Bitmap? cur;                      // what the window currently shows (re-pushed with a new alpha while fading)
@@ -33,11 +34,12 @@ sealed class StatsWindow : Form
     int Px(double v) => (int)Math.Round(v * S);
 
     // taller when the cat has a name (shown as a title)
-    Size PanelSize => new(Px(200), Px(128 + (Cfg.Name.Length > 0 ? 28 : 0)));
+    Size PanelSize => new(Px(200), Px(128 + (profile.Name.Length > 0 ? 28 : 0)));
 
-    public StatsWindow(float scale)
+    public StatsWindow(float scale, CatProfile owner)
     {
         S = scale;
+        profile = owner;
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
         TopMost = Cfg.OnTop;
@@ -78,12 +80,12 @@ sealed class StatsWindow : Form
         if (panel != PanelSize) { panel = PanelSize; ClientSize = panel; lastKey = -1; }
         y = Math.Max(wa.Top, cat.Top + cat.Height / 2 - panel.Height - Px(6));
         loc = new Point(x, y);
-        bool changed = key != lastKey || loc != lastLoc || lastLang != Cfg.Lang || lastName != Cfg.Name;
+        bool changed = key != lastKey || loc != lastLoc || lastLang != Cfg.Lang || lastName != profile.Name;
         if (!Visible) { alpha = 0; Show(); changed = true; }
         target = 255;
         if (changed)
         {
-            lastKey = key; lastLoc = loc; lastLang = Cfg.Lang; lastName = Cfg.Name;
+            lastKey = key; lastLoc = loc; lastLang = Cfg.Lang; lastName = profile.Name;
             Location = loc;
             cur?.Dispose();
             cur = Render(h, hp, e);
@@ -136,11 +138,11 @@ sealed class StatsWindow : Form
         }
 
         int pad = Px(14), w = panel.Width - pad * 2, barH = Px(7), y = pad;
-        if (Cfg.Name.Length > 0)
+        if (profile.Name.Length > 0)
         {
             using var title = new Font("Segoe UI Semibold", 14f * S, FontStyle.Regular, GraphicsUnit.Pixel);
             using var titleBrush = new SolidBrush(Color.White);
-            g.DrawString(Cfg.Name, title, titleBrush, new RectangleF(pad - 1, y - Px(1), w + 2, Px(24)), new StringFormat { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap });
+            g.DrawString(profile.Name, title, titleBrush, new RectangleF(pad - 1, y - Px(1), w + 2, Px(24)), new StringFormat { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap });
             y += Px(28);
         }
         using var font = new Font("Segoe UI Semibold", 11.5f * S, FontStyle.Regular, GraphicsUnit.Pixel);

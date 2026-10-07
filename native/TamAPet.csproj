@@ -16,6 +16,10 @@
     <TieredPGO>false</TieredPGO>
     <DebugType>none</DebugType>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- dotnet publish -c Release -r win-x64: one exe with the .NET runtime inside (nothing to install) -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="cat-sprite.png" LogicalName="cat-sprite.png" />
