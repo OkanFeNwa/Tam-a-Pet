@@ -20,24 +20,25 @@ static class Installer
     static string StartMenuLink => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Tam-a-Pet.lnk");
     static string DesktopLink => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Tam-a-Pet.lnk");
 
-    static readonly Dictionary<string, (string it, string en)> Text = new()
+    // key -> (Italian, English, French, Spanish)
+    static readonly Dictionary<string, (string it, string en, string fr, string es)> Text = new()
     {
-        ["title"] = ("Installa Tam-a-Pet", "Install Tam-a-Pet"),
-        ["intro"] = ("Uno o più gatti che girano per il desktop. Viene installato solo per il tuo utente, senza permessi di amministratore.", "One or more cats roaming your desktop. It is installed for your user only, without administrator rights."),
-        ["where"] = ("Cartella di installazione", "Install folder"),
-        ["desktop"] = ("Crea un collegamento sul desktop", "Create a desktop shortcut"),
-        ["startup"] = ("Avvia con Windows", "Start with Windows"),
-        ["install"] = ("Installa", "Install"),
-        ["cancel"] = ("Annulla", "Cancel"),
-        ["done"] = ("Installazione completata", "Installation complete"),
-        ["launch"] = ("Avvia Tam-a-Pet", "Launch Tam-a-Pet"),
-        ["close"] = ("Chiudi", "Close"),
-        ["failed"] = ("Installazione non riuscita: ", "Installation failed: "),
-        ["unask"] = ("Rimuovere Tam-a-Pet da questo computer?", "Remove Tam-a-Pet from this computer?"),
-        ["unsettings"] = ("Eliminare anche le impostazioni e i dati dei gatti?", "Also delete the settings and the cats' data?"),
-        ["undone"] = ("Tam-a-Pet è stato rimosso.", "Tam-a-Pet has been removed."),
+        ["title"] = ("Installa Tam-a-Pet", "Install Tam-a-Pet", "Installer Tam-a-Pet", "Instalar Tam-a-Pet"),
+        ["intro"] = ("Uno o più gatti che girano per il desktop. Viene installato solo per il tuo utente, senza permessi di amministratore.", "One or more cats roaming your desktop. It is installed for your user only, without administrator rights.", "Un ou plusieurs chats qui se promènent sur votre bureau. L'installation se fait pour votre utilisateur uniquement, sans droits d'administrateur.", "Uno o más gatos paseando por tu escritorio. Se instala solo para tu usuario, sin permisos de administrador."),
+        ["where"] = ("Cartella di installazione", "Install folder", "Dossier d'installation", "Carpeta de instalación"),
+        ["desktop"] = ("Crea un collegamento sul desktop", "Create a desktop shortcut", "Créer un raccourci sur le bureau", "Crear un acceso directo en el escritorio"),
+        ["startup"] = ("Avvia con Windows", "Start with Windows", "Lancer avec Windows", "Iniciar con Windows"),
+        ["install"] = ("Installa", "Install", "Installer", "Instalar"),
+        ["cancel"] = ("Annulla", "Cancel", "Annuler", "Cancelar"),
+        ["done"] = ("Installazione completata", "Installation complete", "Installation terminée", "Instalación completada"),
+        ["launch"] = ("Avvia Tam-a-Pet", "Launch Tam-a-Pet", "Lancer Tam-a-Pet", "Iniciar Tam-a-Pet"),
+        ["close"] = ("Chiudi", "Close", "Fermer", "Cerrar"),
+        ["failed"] = ("Installazione non riuscita: ", "Installation failed: ", "Échec de l'installation : ", "Error de instalación: "),
+        ["unask"] = ("Rimuovere Tam-a-Pet da questo computer?", "Remove Tam-a-Pet from this computer?", "Supprimer Tam-a-Pet de cet ordinateur ?", "¿Quitar Tam-a-Pet de este equipo?"),
+        ["unsettings"] = ("Eliminare anche le impostazioni e i dati dei gatti?", "Also delete the settings and the cats' data?", "Supprimer aussi les paramètres et les données des chats ?", "¿Eliminar también los ajustes y los datos de los gatos?"),
+        ["undone"] = ("Tam-a-Pet è stato rimosso.", "Tam-a-Pet has been removed.", "Tam-a-Pet a été supprimé.", "Tam-a-Pet se ha quitado."),
     };
-    static string T(string key) => Cfg.Lang == "it" ? Text[key].it : Text[key].en;
+    static string T(string key) { var t = Text[key]; return Cfg.Lang switch { "it" => t.it, "fr" => t.fr, "es" => t.es, _ => t.en }; }
 
     // ---- install ---------------------------------------------------------------------------------
 
@@ -63,9 +64,8 @@ static class Installer
         if (desktop) MakeLink(DesktopLink, target);
         using (var k = Registry.CurrentUser.CreateSubKey(UninstallKey))
         {
-            var v = typeof(Installer).Assembly.GetName().Version!;
             k.SetValue("DisplayName", "Tam-a-Pet");
-            k.SetValue("DisplayVersion", $"{v.Major}.{v.Minor}.{v.Build}");
+            k.SetValue("DisplayVersion", Updater.Current.ToString());
             k.SetValue("Publisher", "OkanFeNwa");
             k.SetValue("InstallLocation", InstallDir);
             k.SetValue("DisplayIcon", target);
@@ -145,9 +145,8 @@ static class Installer
             BackColor = Theme.Bg; ForeColor = Theme.Text; Font = new Font("Segoe UI", 9.5f);
             ClientSize = new Size(P(500), P(360));
 
-            var v = typeof(Installer).Assembly.GetName().Version!;
             Controls.Add(Lbl("Tam-a-Pet", new Font("Segoe UI Semibold", 20f), Theme.Text, 28, 24, 440, 40));
-            Controls.Add(Lbl($"v{v.Major}.{v.Minor}.{v.Build}", new Font("Segoe UI", 9.5f), Theme.Accent, 30, 66, 200, 22));
+            Controls.Add(Lbl("v" + Updater.Current, new Font("Segoe UI", 9.5f), Theme.Accent, 30, 66, 200, 22));
             Controls.Add(Lbl(T("intro"), Font, Theme.Muted, 30, 96, 440, 48));
             Controls.Add(Lbl(T("where"), new Font("Segoe UI Semibold", 9.5f), Theme.Text, 30, 152, 440, 22));
             Controls.Add(Lbl(InstallDir, new Font("Segoe UI", 9f), Theme.Muted, 30, 174, 440, 22));

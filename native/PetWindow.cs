@@ -469,15 +469,23 @@ sealed class PetWindow : Form
         double ang = Math.Atan2(ball.Center.Y - (y + size / 2.0), ball.Center.X - (x + size / 2.0)) + (rnd.NextDouble() - 0.5) * 1.2;
         double sp = (700 + rnd.NextDouble() * 600) * S;
         double vx = Math.Cos(ang) * sp, vy = Math.Sin(ang) * sp - 500 * S;
-        ball.Kick(vx, vy);
         lastKickAt = Now;
-        energy = Math.Max(0, energy - 2);   // every kick of the ball costs a bit of energy
-        hunger = Math.Max(0, hunger - 0.5);
         kickSound = true;   // happiness grows gradually while playing (see Logic)
         Target = null;
         facingRight = vx > 0;
         SetState("play", (int)Cfg.Cycle);
         kickCooldown = Now + (long)Cfg.Cycle + 300;
+        // the ball is hit when the paw comes down, not before the animation starts
+        var hit = new System.Windows.Forms.Timer { Interval = Math.Max(50, (int)(Cfg.Cycle * 0.4)) };
+        hit.Tick += (_, _) =>
+        {
+            hit.Stop(); hit.Dispose();
+            if (shuttingDown || ball == null || state != "play") return;
+            ball.Kick(vx, vy);
+            energy = Math.Max(0, energy - 2);   // every kick of the ball costs a bit of energy
+            hunger = Math.Max(0, hunger - 0.5);
+        };
+        hit.Start();
     }
 
     // Debug: current stats, and a way to start any interaction by hand (developer page in settings)

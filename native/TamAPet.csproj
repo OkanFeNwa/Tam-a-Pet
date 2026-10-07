@@ -6,7 +6,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>TamAPet</AssemblyName>
-    <Version>0.0.3</Version>
+    <!-- MAJOR.MINOR.PATCH (see Updater.cs); Version is numeric only, InformationalVersion adds the optional letter, e.g. 0.1.0b -->
+    <Version>0.1.0</Version>
+    <InformationalVersion>0.1.0</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
     <!-- Memory: no extra GC thread, no ICU, no resource strings, no PGO instrumentation -->

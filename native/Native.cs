@@ -50,14 +50,14 @@ static class Native
 // Work areas of the monitors, cached: Screen.FromPoint enumerates the monitors and allocates on every call
 static class Screens
 {
-    static (string Name, Rectangle Area, bool Primary)[] named = Array.Empty<(string, Rectangle, bool)>();
+    static (string Name, Rectangle Area, bool Primary, Rectangle Bounds)[] named = Array.Empty<(string, Rectangle, bool, Rectangle)>();
     static Rectangle[] areas = Load();
     static long loadedAt = Environment.TickCount64;
 
     static Rectangle[] Load()
     {
         var all = System.Windows.Forms.Screen.AllScreens;
-        named = all.Select(s => (s.DeviceName, s.WorkingArea, s.Primary)).ToArray();
+        named = all.Select(s => (s.DeviceName, s.WorkingArea, s.Primary, s.Bounds)).ToArray();
         return all.Select(s => s.WorkingArea).ToArray();
     }
 
@@ -68,7 +68,7 @@ static class Screens
     }
 
     // The monitors (device name, work area, is it the main one), in the system's order
-    public static (string Name, Rectangle Area, bool Primary)[] Monitors { get { Refresh(); return named; } }
+    public static (string Name, Rectangle Area, bool Primary, Rectangle Bounds)[] Monitors { get { Refresh(); return named; } }
 
     // The work area a pet is tied to: "free" = none (it may roam every monitor); a device name = that monitor;
     // "" or a monitor that is no longer connected = the main one
@@ -80,6 +80,14 @@ static class Screens
         foreach (var m in n) if (m.Name == monitor) return m.Area;
         foreach (var m in n) if (m.Primary) return m.Area;
         return n[0].Area;
+    }
+
+    // Is (px, py) on a monitor other than the one whose work area is `current`? (used by the ball to cross from one screen to the next)
+    public static bool OtherMonitorAt(Rectangle current, int px, int py)
+    {
+        Refresh();
+        foreach (var m in named) if (m.Area != current && m.Bounds.Contains(px, py)) return true;
+        return false;
     }
 
     public static Rectangle RandomArea(Random r) { Refresh(); var a = areas; return a[r.Next(a.Length)]; }

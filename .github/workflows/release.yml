@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag like v0.0.3 (the same number as <Version> in native/TamAPet.csproj) to build and publish a release,
+# Push a tag like v0.1.0 (the same number as <Version> in native/TamAPet.csproj) to build and publish a release,
 # or run the workflow by hand from the Actions tab giving the tag to create
 on:
   push:
@@ -10,7 +10,7 @@ on:
       tag:
         description: 'Release tag to create (the same number as <Version> in native/TamAPet.csproj)'
         required: true
-        default: 'v0.0.3'
+        default: 'v0.1.0'
 
 permissions:
   contents: write

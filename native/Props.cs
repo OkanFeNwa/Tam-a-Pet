@@ -344,13 +344,16 @@ sealed class BallWindow : PropWindow
         if (held) return;
         long now = Environment.TickCount64;
         double dt = Math.Clamp((now - last) / 1000.0, 0, 0.05); last = now;
-        if (now - waAt > 250) { wa = Screens.HomeOf(cat.Monitor) ?? Screens.WorkAreaAt((int)x + Width / 2, (int)y + Height / 2); waAt = now; }
+        bool free = cat.Monitor == "free";   // its pet roams every monitor: the ball may roll or fly across to the next one
+        if (free || now - waAt > 250) { wa = Screens.HomeOf(cat.Monitor) ?? Screens.WorkAreaAt((int)x + Width / 2, (int)y + Height / 2); waAt = now; }
         double left = wa.Left, right = wa.Right - Width, top = wa.Top, bottom = wa.Bottom - Height;
+        int midY = (int)y + Height / 2;
+        bool openLeft = free && Screens.OtherMonitorAt(wa, wa.Left - 1, midY), openRight = free && Screens.OtherMonitorAt(wa, wa.Right, midY);   // another monitor right next to this edge: no wall
 
         vy += Gravity * dt;
         x += vx * dt; y += vy * dt;
-        if (x < left) { x = left; Bounce(Math.Abs(vx)); vx = -vx * Restitution; }
-        else if (x > right) { x = right; Bounce(Math.Abs(vx)); vx = -vx * Restitution; }
+        if (x < left && !openLeft) { x = left; Bounce(Math.Abs(vx)); vx = -vx * Restitution; }
+        else if (x > right && !openRight) { x = right; Bounce(Math.Abs(vx)); vx = -vx * Restitution; }
         if (y < top) { y = top; Bounce(Math.Abs(vy)); vy = -vy * Restitution; }
         bool floor = false;
         if (y >= bottom)

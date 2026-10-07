@@ -9,7 +9,7 @@ sealed class PetApp : IDisposable
     readonly ToolStripMenuItem settingsItem = new(), exitItem = new();
     readonly System.Windows.Forms.Timer trimT = new() { Interval = 60_000 };
     SettingsForm? settings;
-    readonly System.Windows.Forms.Timer updateT = new() { Interval = 15_000 };   // first check 15 s after start, then every 12 h
+    readonly System.Windows.Forms.Timer updateT = new() { Interval = 15_000 };   // first check 15 s after start, then every hour
     string? announced;
 
     public PetApp(bool openSettings = false, string spawn = "")
@@ -51,7 +51,7 @@ sealed class PetApp : IDisposable
             once.Start();
         }
         tray.BalloonTipClicked += (_, _) => OpenSettings("general");
-        updateT.Tick += async (_, _) => { updateT.Interval = 12 * 3600 * 1000; await CheckUpdate(); };
+        updateT.Tick += async (_, _) => { updateT.Interval = 3600 * 1000; await CheckUpdate(); };
         updateT.Start();
         Native.Trim();
     }
@@ -70,7 +70,7 @@ sealed class PetApp : IDisposable
             tray.ShowBalloonTip(10000, "Tam-a-Pet", string.Format(Str.T("upd.avail"), r.Tag) + " " + Str.T("upd.balloon"), ToolTipIcon.Info);
         }
         catch { }   // offline, rate limited, no release yet: stay silent
-        finally { GC.Collect(); Native.Trim(); }   // the network stack is not needed again for 12 h: give its memory back
+        finally { GC.Collect(); Native.Trim(); }   // the network stack is not needed again for an hour: give its memory back
     }
 
     // A cat's window; its bowl, bed and ball come back where they were

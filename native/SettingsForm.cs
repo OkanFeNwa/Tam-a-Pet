@@ -7,7 +7,7 @@ using System.Windows.Forms;
 // it is created when opened and disposed when closed, so it costs no memory while closed.
 sealed class SettingsForm : Form
 {
-    static readonly (string code, string name)[] Languages = { ("it", "Italiano"), ("en", "English") };
+    static readonly (string code, string name)[] Languages = { ("en", "English"), ("it", "Italiano"), ("fr", "Français"), ("es", "Español") };
 
     // key, group, min, max, step, value formatter
     static readonly (string key, string group, double min, double max, double step, Func<double, string> fmt)[] Fields =
@@ -275,9 +275,8 @@ sealed class SettingsForm : Form
             view.Controls.Add(Lbl(Str.T("about"), fBold, muted, pad + P(2), y, w));
             y += P(28);
             var about = AddCard(pad, y, w);
-            var ver = typeof(SettingsForm).Assembly.GetName().Version!;
             var verLbl = Lbl(Str.T("version"), fBold, text, P(16), P(14), w - P(200)); verLbl.BackColor = card; about.Controls.Add(verLbl);
-            var val = Lbl($"{ver.Major}.{ver.Minor}.{ver.Build}", fBold, accent, P(16) + w - P(32) - P(180), P(14), P(180), ContentAlignment.TopRight);
+            var val = Lbl(Updater.Current.ToString(), fBold, accent, P(16) + w - P(32) - P(180), P(14), P(180), ContentAlignment.TopRight);
             val.BackColor = card; about.Controls.Add(val);
             var note = Lbl("", fSmall, muted, P(16), P(40), w - P(32)); note.BackColor = card; about.Controls.Add(note);
             if (Cfg.Dev) note.Text = Str.T("dev.active");
@@ -304,9 +303,9 @@ sealed class SettingsForm : Form
                         return;
                     }
                     updNote.Text = Str.T("upd.checking");
-                    var r = await Updater.CheckInHelper();
+                    var r = await Updater.Latest();   // in this process: starting a second copy of the exe just to look took several seconds
                     if (r != null && Updater.IsNewer(r)) { Updater.Found = r; updateNote = string.Format(Str.T("upd.avail"), r.Tag); updBtn.Text = Str.T("upd.install"); }
-                    else updateNote = string.Format(Str.T("upd.latest"), "v" + Updater.Current.ToString(3));
+                    else updateNote = string.Format(Str.T("upd.latest"), "v" + Updater.Current);
                 }
                 catch { updateNote = Str.T("upd.error"); }
                 finally { updating = false; }

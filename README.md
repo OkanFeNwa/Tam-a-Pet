@@ -12,7 +12,7 @@ Tamagotchi-style virtual pets that live on your Windows desktop. It starts with 
   <img src="docs/img/custom.jpg" alt="Customising a pet and its objects" width="32%">
 </p>
 
-> **Status: 0.0.3 (pre-release).** Work in progress: more features and bug fixes are coming before the first real release.
+> **Status: 0.1.0 (pre-release).** Work in progress: more features and bug fixes are coming before the first real release.
 
 ## Download
 
@@ -34,7 +34,7 @@ Both already include everything (even .NET): nothing else to install. Requiremen
 - **Objects**: bowl, bed and ball, each with its own colour; the cats use them when they need to. They can be shared between all the cats.
 - **Interactions**: click and stroke (hold and move slowly), a fast mouse near the cat makes it jump, too many clicks make it angry. Between themselves the cats groom or fight.
 - **Real sounds** (meows, purring, chewing, ball) with a mixer: master volume, per cat and per kind of sound.
-- **Settings** from the notification-area icon: always on top, start with Windows, language, updates.
+- **Settings** from the notification-area icon: always on top, start with Windows, language (English, Italian, French, Spanish), updates.
 - **Updates**: at start it quietly checks GitHub for a newer version and tells you; it downloads and installs **only when you press the button** in *Settings → General → About*. The automatic check can be turned off.
 
 The language of the app can be changed in *Settings → General → Language*.
@@ -54,7 +54,16 @@ cd native
 dotnet build -c Release          # to try it: native\bin\Release\net8.0-windows\TamAPet.exe
 ```
 
-To make a release: raise `<Version>` in `native/TamAPet.csproj`, then create and push the tag (`git tag v0.0.3 && git push origin v0.0.3`): the `.github/workflows/release.yml` workflow builds and publishes the release with installer, portable version and checksums.
+To make a release: raise `<Version>` (and `<InformationalVersion>`) in `native/TamAPet.csproj`, then create and push the tag (`git tag v0.1.0 && git push origin v0.1.0`): the `.github/workflows/release.yml` workflow builds and publishes the release with installer, portable version and checksums.
+
+Versions look like `MAJOR.MINOR.PATCH` plus an optional letter:
+
+| Part | Meaning |
+|---|---|
+| MAJOR | the complete release (0 = still being built) |
+| MINOR | a major feature was added |
+| PATCH | minor features and bug fixes |
+| letter (a–z) | tiny bug fixes only, no new feature (`0.1.0` → `0.1.0a` → `0.1.0b` → `0.1.1`) |
 
 The installer is the app itself: an executable named `TamAPet-Setup*.exe` shows the install wizard (see `native/Installer.cs`); the installed app removes itself with `--uninstall`.
 
