@@ -12,7 +12,7 @@ Tamagotchi-style virtual pets that live on your Windows desktop. It starts with 
   <img src="docs/img/tour-custom.jpg" alt="Customising a cat: fur, pattern and accessories" width="32%">
 </p>
 
-> **Status: 0.1.0 (pre-release).** Work in progress: more features and bug fixes are coming before the first real release.
+> **Status: 0.2.0 (pre-release).** Work in progress: more features and bug fixes are coming before the first real release.
 
 ## Download
 
