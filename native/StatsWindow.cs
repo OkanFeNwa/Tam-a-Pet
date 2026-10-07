@@ -68,7 +68,7 @@ sealed class StatsWindow : Form
     // Show (fade in) or move/refresh the panel above the cat window; values are 0..100
     public void ShowAbove(Rectangle cat, double hunger, double happiness, double energy)
     {
-        var wa = Screen.FromPoint(new Point(cat.Left + cat.Width / 2, cat.Top + cat.Height / 2)).WorkingArea;
+        var wa = Screens.WorkAreaAt(cat.Left + cat.Width / 2, cat.Top + cat.Height / 2);
         int x = Math.Clamp(cat.Left + cat.Width / 2 - panel.Width / 2, wa.Left, Math.Max(wa.Left, wa.Right - panel.Width));
         int y = Math.Max(wa.Top, cat.Top + cat.Height / 2 - panel.Height - Px(6));   // the cat only fills the lower half of its box
         var loc = new Point(x, y);

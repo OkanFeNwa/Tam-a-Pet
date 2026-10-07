@@ -5,8 +5,8 @@ static class Program
     [STAThread]
     static void Main(string[] args)
     {
-        // Single instance
-        using var mutex = new Mutex(true, "TamAPet.SingleInstance", out bool first);
+        // Single instance (tests with their own TAMAPET_DIR folder can run next to the real app)
+        using var mutex = new Mutex(true, "TamAPet.SingleInstance" + (Environment.GetEnvironmentVariable("TAMAPET_DIR") is { } d ? "." + d.Replace('\\', '_').Replace(':', '_') : ""), out bool first);
         if (!first) return;
 
         ApplicationConfiguration.Initialize();
