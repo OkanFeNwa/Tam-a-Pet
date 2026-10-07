@@ -1,8 +1,10 @@
 # Tam-a-Pet
 
-Un gatto (o più) in stile tamagotchi che vive sul desktop di Windows: cammina, dorme, gioca con la pallina, mangia dalla ciotola, si fa accarezzare e litiga o si fa le coccole con gli altri gatti. È un programma nativo (.NET 8, WinForms) pensato per essere il più leggero possibile: a riposo usa pochi MB di memoria e quasi nessuna CPU.
+Pet virtuali in stile tamagotchi che vivono sul desktop di Windows. Si parte dai gatti: camminano, dormono, giocano con la pallina, mangiano dalla ciotola, si fanno accarezzare e litigano o si fanno le coccole tra loro. È un programma nativo (.NET 8, WinForms) pensato per essere il più leggero possibile: a riposo usa pochi MB di memoria e quasi nessuna CPU.
 
-*A tamagotchi-style cat (or several) living on your Windows desktop. Native .NET 8 app, very light on memory and CPU. See the [English summary](#english) below.*
+*Tamagotchi-style virtual pets living on your Windows desktop (cats first). Native .NET 8 app, very light on memory and CPU. See the [English summary](#english) below.*
+
+[![Guarda il video (18 s)](docs/img/brag.jpg)](docs/brag.mp4)
 
 ![Impostazioni: i gatti](docs/img/cats.png)
 
@@ -52,7 +54,7 @@ Suoni da [OpenGameArt.org](https://opengameart.org) (CC0): vedi [CREDITS.md](CRE
 
 ## English
 
-Tam-a-Pet puts one or more cats on your Windows desktop. They wander, sleep, play with a ball, eat from a bowl, get stroked, and groom or fight each other. Each cat has its own name, character, colours, patterns (tabby, patched, calico), needs, sounds and objects; there is a mixer for the volumes.
+Tam-a-Pet puts virtual pets on your Windows desktop, tamagotchi style. It starts with cats: one or more of them. They wander, sleep, play with a ball, eat from a bowl, get stroked, and groom or fight each other. Each cat has its own name, character, colours, patterns (tabby, patched, calico), needs, sounds and objects; there is a mixer for the volumes.
 
 **Download** from [Releases](../../releases/latest): `TamAPet-Setup.exe` (per-user installer, no admin rights) or `TamAPet-Portable.exe` (single file, nothing installed). Both include .NET; Windows 10/11 x64. The exe is unsigned, so SmartScreen may warn you (*More info → Run anyway*); checksums are in `SHA256SUMS.txt`.
 
