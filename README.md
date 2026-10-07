@@ -2,9 +2,9 @@
 
 Tamagotchi-style virtual pets that live on your Windows desktop. It starts with cats: they walk, sleep, play with a ball, eat from a bowl, get stroked, and groom or fight each other. More kinds of pets are planned. It is a native program (.NET 8, WinForms) built to be as light as possible: at rest it uses a few MB of memory and almost no CPU.
 
-<p align="center"><a href="docs/brag.mp4"><img src="docs/img/preview.gif" alt="Tam-a-Pet preview (click for the video with sound)" width="100%"></a></p>
+<p align="center"><a href="docs/tour.mp4"><img src="docs/img/tour.gif" alt="Tam-a-Pet feature tour (click for the video with sound)" width="100%"></a></p>
 
-<p align="center"><sub>Click the preview to watch the 60 s video with sound.</sub></p>
+<p align="center"><sub>Click the preview to watch the 25 s feature tour with sound (cats made up for the video: Miso, Pepper, Waffles and Juno).</sub></p>
 
 <p align="center">
   <img src="docs/img/needs.jpg" alt="Pets using their bowl, bed and ball" width="32%">
