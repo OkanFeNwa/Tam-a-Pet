@@ -67,7 +67,7 @@ static class Program
         int dr = Array.IndexOf(args, "--dump-reminder");
         if (dr >= 0 && dr + 1 < args.Length)
         {
-            using var rw = new ReminderWindow(1.25f, Cfg.Cats[0]);
+            using var rw = new ReminderWindow(args.Length > dr + 3 ? float.Parse(args[dr + 3], System.Globalization.CultureInfo.InvariantCulture) : 1.25f, Cfg.Cats[0]);
             using var rimg = rw.Preview(args.Length > dr + 2 ? int.Parse(args[dr + 2]) : 7);
             rimg.Save(args[dr + 1]);
             return;
@@ -78,8 +78,9 @@ static class Program
         if (dump >= 0 && dump + 1 < args.Length)
         {
             if (args.Length > dump + 2) Cfg.Cats[0].Name = args[dump + 2];
-            using var sw = new StatsWindow(1.25f, Cfg.Cats[0]);
-            using var img = sw.Preview(100, 70, 35);
+            int Arg(int i, int d) => args.Length > dump + i ? int.Parse(args[dump + i]) : d;   // file [name [hunger happiness energy [scale x100]]]
+            using var sw = new StatsWindow(Arg(6, 125) / 100f, Cfg.Cats[0]);
+            using var img = sw.Preview(Arg(3, 100), Arg(4, 70), Arg(5, 35));
             img.Save(args[dump + 1]);
             return;
         }
