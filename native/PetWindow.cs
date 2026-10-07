@@ -590,7 +590,7 @@ sealed class PetWindow : Form
     // it fades out shortly after the mouse leaves
     const int HoverDelay = 1500;
     // seconds from full to empty
-    const double HungerSeconds = 450, HappinessSeconds = 300, EnergySeconds = 600;   // 7.5, 5 and 10 minutes
+    const double HungerSeconds = 300, HappinessSeconds = 300, EnergySeconds = 300;   // 5 minutes each
 
     void UpdateHover()
     {
