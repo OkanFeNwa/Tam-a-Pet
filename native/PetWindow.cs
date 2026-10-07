@@ -584,7 +584,7 @@ sealed class PetWindow : Form
             return;
         }
         if (now < nextRemindAt) return;
-        reminder ??= new ReminderWindow(S, cat);
+        reminder ??= new ReminderWindow(S, cat) { Anchor = Handle };
         remindMask = mask;
         reminder.ShowAbove(rect, mask);
         remindHideAt = now + 5000;
@@ -609,7 +609,7 @@ sealed class PetWindow : Form
             // the panel only shows up if the mouse rests on the cat (not while stroking or pressing)
             if (!pressed && !petting && now - Math.Max(hoverSince, lastMouseMoveAt) >= HoverDelay)
             {
-                statsWin ??= new StatsWindow(S, cat);
+                statsWin ??= new StatsWindow(S, cat) { Anchor = Handle };
                 if (remindHideAt != 0) { reminder?.HideBubble(); remindHideAt = 0; nextRemindAt = now + 30000; }   // the panel takes the bubble's place
                 statsWin.ShowAbove(new Rectangle(Left, Top, size, size), hunger, happiness, energy);
             }

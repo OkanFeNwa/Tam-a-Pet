@@ -39,6 +39,8 @@ sealed class ReminderWindow : Form
     }
 
     protected override bool ShowWithoutActivation => true;
+    public IntPtr Anchor;   // the cat's window: when "always on top" is off this popup is placed right behind it
+
 
     protected override void Dispose(bool disposing)
     {
@@ -123,6 +125,7 @@ sealed class ReminderWindow : Form
             surface!.Push(Handle, loc.X, loc.Y, (byte)alpha);
             TopMost = Cfg.OnTop;
             if (TopMost) Native.SetWindowPos(Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
+            else if (Anchor != IntPtr.Zero) Native.SetWindowPos(Handle, Anchor, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);   // not on top: sit right behind the cat in the z-order, not over every other window
         }
         if (alpha != target && !fadeT.Enabled) fadeT.Start();
     }

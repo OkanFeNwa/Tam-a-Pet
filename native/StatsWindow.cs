@@ -66,6 +66,8 @@ sealed class StatsWindow : Form
     }
 
     protected override bool ShowWithoutActivation => true;
+    public IntPtr Anchor;   // the cat's window: when "always on top" is off this popup is placed right behind it
+
 
     // Show (fade in) or move/refresh the panel above the cat window; values are 0..100
     public void ShowAbove(Rectangle cat, double hunger, double happiness, double energy)
@@ -91,7 +93,8 @@ sealed class StatsWindow : Form
             cur = Render(h, hp, e);
             Push();
             TopMost = Cfg.OnTop;
-            if (TopMost) Native.SetWindowPos(Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);   // stay above the cat
+            if (TopMost) Native.SetWindowPos(Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
+            else if (Anchor != IntPtr.Zero) Native.SetWindowPos(Handle, Anchor, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);   // not on top: sit right behind the cat in the z-order, not over every other window
         }
         if (alpha != target && !fadeT.Enabled) fadeT.Start();
     }
