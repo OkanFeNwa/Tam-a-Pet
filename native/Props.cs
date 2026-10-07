@@ -185,7 +185,7 @@ abstract class PropWindow : Form
     public event Action? Placed;   // it was put down (or came to rest): its position is worth saving
     protected void RaisePlaced() => Placed?.Invoke();
 
-    public void Reassert() => Native.SetWindowPos(Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);   // HWND_TOPMOST
+    public void Reassert() { if (TopMost) Native.SetWindowPos(Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); }   // HWND_TOPMOST, only while "always on top" is on
 
     protected override void OnMouseDown(MouseEventArgs e)
     {

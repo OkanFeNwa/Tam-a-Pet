@@ -357,14 +357,14 @@ sealed class PetWindow : Form
     }
 
     // Angry for 2.5 s, then it runs away from the cursor and ignores the mouse for 2 s more; can't be angered again for 10 s
-    void Anger()
+    void Anger(int ms = 2500)
     {
         long now = Now;
         happiness = Math.Max(0, happiness - 20);   // being angered makes it unhappy...
         energy = Math.Max(0, energy - 5);          // ...and wears it out
-        SetState("frenzy", 2500);
-        fleeAt = now + 2500;
-        noInteractUntil = now + 2500 + 2000;
+        SetState("frenzy", ms);
+        fleeAt = now + ms;
+        noInteractUntil = now + ms + 2000;
         angryCooldownUntil = now + 10000;
     }
 
@@ -418,7 +418,8 @@ sealed class PetWindow : Form
         {
             fleeFrom = (p.x + size / 2.0, p.y + size / 2.0); p.fleeFrom = (x + size / 2.0, y + size / 2.0);
             social = ""; p.social = ""; partner = null; p.partner = null;
-            Anger(); p.Anger();   // both hiss, then run away from each other
+            Anger(FightMs); p.Anger(FightMs);   // both hiss and scuffle for a while, then run away from each other
+            fightUntil = p.fightUntil = Now + FightMs; nextHissAt = p.nextHissAt = Now + 1600;
             return;
         }
         social = "act"; p.social = "act";
@@ -427,6 +428,9 @@ sealed class PetWindow : Form
         p.Target = null; p.sleepManual = false;
         p.SetState("pet", 5000);  // ...the other lies down and purrs, with hearts
     }
+
+    const int FightMs = 8000;   // how long two cats fight
+    long fightUntil, nextHissAt;
 
     void SocialTick()
     {
@@ -528,7 +532,7 @@ sealed class PetWindow : Form
     public void ApplyOnTop(bool on)
     {
         TopMost = on;
-        foreach (PropWindow? p in new PropWindow?[] { bowl, bed, ball }) if (p != null) p.TopMost = on;
+        foreach (PropWindow? p in new PropWindow?[] { ownBowl, ownBed, ownBall }) if (p != null) p.TopMost = on;
         if (reminder != null) reminder.TopMost = on;
     }
 
@@ -798,6 +802,7 @@ sealed class PetWindow : Form
         if (ball != null && (goal == Goal.Ball || Now - lastKickAt < 2500)) happiness = Math.Min(100, happiness + 2.5);
 
         if (social != "") SocialTick();
+        if (Now < fightUntil && state == "frenzy" && Now >= nextHissAt) { Say("hiss"); nextHissAt = Now + 1400 + rnd.Next(900); }
         else if (state == "pet")
         {
             if (!petting && Now >= lockUntil) state = "idle";   // (the debug pose ends by itself)
