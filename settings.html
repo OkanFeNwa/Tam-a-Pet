@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Impostazioni</title>
+  <style>
+    :root {
+      --bg: #f4f1ec; --side: #ebe6de; --card: #ffffff; --text: #2b2622; --muted: #8a8279;
+      --line: #e3ddd3; --accent: #e08a3c; --accent-soft: #fbeedd; --track: #ddd5c9;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1f1c1a; --side: #171513; --card: #292522; --text: #f1ece5; --muted: #9b9288;
+        --line: #38332f; --accent: #f0a050; --accent-soft: #3a2d1f; --track: #433d37;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { display: flex; height: 100vh; font: 13px 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); user-select: none; }
+
+    nav { width: 170px; background: var(--side); padding: 18px 12px; display: flex; flex-direction: column; gap: 4px; }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 18px; font-weight: 600; font-size: 15px; }
+    .brand img { width: 32px; height: 32px; image-rendering: pixelated; }
+    nav button {
+      all: unset; cursor: pointer; padding: 9px 12px; border-radius: 8px; color: var(--muted); font-weight: 500;
+    }
+    nav button:hover { background: var(--accent-soft); }
+    nav button.active { background: var(--accent-soft); color: var(--accent); }
+
+    main { flex: 1; padding: 22px 26px; overflow-y: auto; }
+    h1 { font-size: 20px; margin-bottom: 4px; }
+    .intro { color: var(--muted); margin-bottom: 18px; }
+    h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 18px 0 8px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px 16px; }
+    .row { padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .row:last-child { border-bottom: none; }
+    .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+    .label { font-weight: 600; }
+    .value { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+    input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; margin-top: 10px; border-radius: 3px; background: var(--track); outline: none; }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+      background: var(--accent); border: 3px solid var(--card); box-shadow: 0 0 0 1px var(--accent); cursor: pointer;
+    }
+
+    .seg { display: inline-flex; background: var(--track); border-radius: 8px; padding: 3px; margin-top: 10px; }
+    .seg button { all: unset; cursor: pointer; padding: 6px 18px; border-radius: 6px; font-weight: 500; }
+    .seg button.active { background: var(--card); color: var(--accent); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+
+    .reset { all: unset; cursor: pointer; margin-top: 18px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); }
+    .reset:hover { border-color: var(--accent); color: var(--accent); }
+    .page { display: none; }
+    .page.active { display: block; }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="brand"><img src="icon.png" alt=""><span>Desktop Pet</span></div>
+    <button data-page="general"></button>
+    <button data-page="cat"></button>
+  </nav>
+  <main>
+    <section class="page" id="general"></section>
+    <section class="page" id="cat"></section>
+  </main>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    const strings = require('./i18n');
+
+    // key, group, min, max, step, display formatter
+    const fields = [
+      ['nearRange',    'mouse',    50, 400, 10,    v => v],
+      ['jumpSpeed',    'mouse',    200, 3000, 50,  v => v],
+      ['jumpCooldown', 'mouse',    0, 30, 1,       v => v],
+      ['wander',       'movement', 0, 0.3, 0.01,   v => Math.round(v * 100)],
+      ['walkSpeed',    'movement', 1, 6, 0.5,      v => v],
+      ['cycle',        'movement', 600, 3000, 50,  v => v]
+    ];
+    const languages = [['it', 'Italiano'], ['en', 'English']];
+
+    let cfg = ipcRenderer.sendSync('get-settings');
+    let page = 'general';
+    const save = () => ipcRenderer.send('set-settings', cfg);
+
+    function render() {
+      const t = strings[cfg.lang] || strings.it;
+      document.title = t.title;
+      document.documentElement.lang = cfg.lang;
+
+      document.querySelectorAll('nav button').forEach(b => {
+        b.textContent = b.dataset.page === 'general' ? t.navGeneral : t.navCat;
+        b.classList.toggle('active', b.dataset.page === page);
+      });
+      document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === page));
+
+      // General page: language
+      const g = document.getElementById('general');
+      g.innerHTML = `<h1>${t.navGeneral}</h1><p class="intro"></p>
+        <div class="card"><div class="row">
+          <div class="label">${t.language}</div><div class="hint">${t.languageHint}</div>
+          <div class="seg">${languages.map(([c, n]) => `<button data-lang="${c}" class="${c === cfg.lang ? 'active' : ''}">${n}</button>`).join('')}</div>
+        </div></div>`;
+      g.querySelectorAll('[data-lang]').forEach(b => b.addEventListener('click', () => {
+        cfg.lang = b.dataset.lang; save(); render();
+      }));
+
+      // Cat page: sliders grouped in cards
+      const c = document.getElementById('cat');
+      c.innerHTML = `<h1>${t.navCat}</h1><p class="intro">${t.catIntro}</p>`;
+      for (const group of ['mouse', 'movement']) {
+        c.insertAdjacentHTML('beforeend', `<h3>${t.groups[group]}</h3><div class="card" data-group="${group}"></div>`);
+        const card = c.querySelector(`[data-group="${group}"]`);
+        for (const [key, grp, min, max, step, fmt] of fields.filter(f => f[1] === group)) {
+          const f = t.fields[key];
+          const row = document.createElement('div');
+          row.className = 'row';
+          row.innerHTML = `<div class="head"><span class="label">${f.label}</span><span class="value"></span></div>
+            ${f.hint ? `<div class="hint">${f.hint}</div>` : ''}
+            <input type="range" min="${min}" max="${max}" step="${step}">`;
+          const input = row.querySelector('input'), val = row.querySelector('.value');
+          input.value = cfg[key];
+          const show = () => { val.textContent = `${fmt(Number(input.value))} ${f.unit}`; };
+          show();
+          input.addEventListener('input', () => { show(); cfg[key] = Number(input.value); save(); });
+          card.appendChild(row);
+        }
+      }
+      const reset = document.createElement('button');
+      reset.className = 'reset';
+      reset.textContent = t.reset;
+      reset.addEventListener('click', async () => {
+        cfg = { ...(await ipcRenderer.invoke('get-defaults')), lang: cfg.lang };  // keep the chosen language
+        save(); render();
+      });
+      c.appendChild(reset);
+    }
+
+    document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => { page = b.dataset.page; render(); }));
+    render();
+  </script>
+</body>
+</html>
