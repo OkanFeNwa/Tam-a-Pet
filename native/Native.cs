@@ -22,7 +22,7 @@ static class Native
     [DllImport("kernel32.dll")] public static extern bool SetProcessWorkingSetSize(IntPtr proc, IntPtr min, IntPtr max);
 
     // Show a bitmap with per-pixel alpha as the content of a layered window, at screen position (x, y)
-    public static void PushBitmap(IntPtr hwnd, Bitmap bmp, int x, int y)
+    public static void PushBitmap(IntPtr hwnd, Bitmap bmp, int x, int y, byte alpha = 255)
     {
         IntPtr hBmp = bmp.GetHbitmap(Color.FromArgb(0));
         IntPtr screenDc = GetDC(IntPtr.Zero), memDc = CreateCompatibleDC(screenDc);
@@ -30,7 +30,7 @@ static class Native
         var sz = new SIZE(bmp.Width, bmp.Height);
         var src = new POINT(0, 0);
         var dst = new POINT(x, y);
-        var bf = new BLENDFUNCTION { BlendOp = 0, BlendFlags = 0, SourceConstantAlpha = 255, AlphaFormat = 1 };   // AC_SRC_OVER, AC_SRC_ALPHA
+        var bf = new BLENDFUNCTION { BlendOp = 0, BlendFlags = 0, SourceConstantAlpha = alpha, AlphaFormat = 1 };   // AC_SRC_OVER, AC_SRC_ALPHA
         UpdateLayeredWindow(hwnd, screenDc, ref dst, ref sz, memDc, ref src, 0, ref bf, 2);   // ULW_ALPHA
         SelectObject(memDc, old);
         DeleteObject(hBmp);

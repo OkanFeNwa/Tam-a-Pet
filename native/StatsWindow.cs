@@ -21,9 +21,14 @@ sealed class StatsWindow : Form
 
     readonly float S;
     readonly Size panel;
+    readonly System.Windows.Forms.Timer fadeT = new() { Interval = 16 };
+    Bitmap? cur;                      // what the window currently shows (re-pushed with a new alpha while fading)
+    int alpha, target;                // 0..255
     long lastKey = -1;
     string lastLang = "";
     Point lastLoc = new(int.MinValue, 0);
+
+    const int FadeMs = 200;
 
     int Px(double v) => (int)Math.Round(v * S);
 
@@ -34,8 +39,15 @@ sealed class StatsWindow : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        panel = new Size(Px(190), Px(14 + 3 * 32 + 2 * 6 - 6 + 14));
+        panel = new Size(Px(200), Px(128));
         ClientSize = panel;
+        fadeT.Tick += (_, _) => FadeStep();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) { fadeT.Dispose(); cur?.Dispose(); }
+        base.Dispose(disposing);
     }
 
     protected override CreateParams CreateParams
@@ -50,7 +62,7 @@ sealed class StatsWindow : Form
 
     protected override bool ShowWithoutActivation => true;
 
-    // Show (or move/refresh) the panel above the cat window; values are 0..100
+    // Show (fade in) or move/refresh the panel above the cat window; values are 0..100
     public void ShowAbove(Rectangle cat, double hunger, double happiness, double energy)
     {
         var wa = Screen.FromPoint(new Point(cat.Left + cat.Width / 2, cat.Top + cat.Height / 2)).WorkingArea;
@@ -60,17 +72,43 @@ sealed class StatsWindow : Form
 
         int h = (int)Math.Round(hunger), hp = (int)Math.Round(happiness), e = (int)Math.Round(energy);
         long key = h | (long)hp << 8 | (long)e << 16;
-        bool first = !Visible;
-        if (first) Show();
-        if (!first && key == lastKey && loc == lastLoc && lastLang == Cfg.Lang) return;
-        lastKey = key; lastLoc = loc; lastLang = Cfg.Lang;
-        Location = loc;
-        using var bmp = Render(h, hp, e);
-        Native.PushBitmap(Handle, bmp, loc.X, loc.Y);
-        Native.SetWindowPos(Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);   // stay above the cat
+        bool changed = key != lastKey || loc != lastLoc || lastLang != Cfg.Lang;
+        if (!Visible) { alpha = 0; Show(); changed = true; }
+        target = 255;
+        if (changed)
+        {
+            lastKey = key; lastLoc = loc; lastLang = Cfg.Lang;
+            Location = loc;
+            cur?.Dispose();
+            cur = Render(h, hp, e);
+            Push();
+            Native.SetWindowPos(Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);   // stay above the cat
+        }
+        if (alpha != target && !fadeT.Enabled) fadeT.Start();
     }
 
-    public void HidePanel() { if (Visible) { Hide(); lastKey = -1; } }
+    // Fade out, then hide
+    public void HidePanel()
+    {
+        if (!Visible) return;
+        target = 0;
+        if (!fadeT.Enabled) fadeT.Start();
+    }
+
+    void Push()
+    {
+        if (cur != null) Native.PushBitmap(Handle, cur, lastLoc.X, lastLoc.Y, (byte)alpha);
+    }
+
+    void FadeStep()
+    {
+        int step = Math.Max(1, 255 * fadeT.Interval / FadeMs);
+        alpha = target > alpha ? Math.Min(target, alpha + step) : Math.Max(target, alpha - step);
+        Push();
+        if (alpha != target) return;
+        fadeT.Stop();
+        if (alpha == 0) { Hide(); lastKey = -1; cur?.Dispose(); cur = null; }
+    }
 
     // For development: render the panel to an image without showing it (TamAPet.exe --dump-stats file.png)
     public Bitmap Preview(int hunger, int happiness, int energy) => Render(hunger, happiness, energy);
@@ -90,14 +128,14 @@ sealed class StatsWindow : Form
             g.DrawPath(pen, path);
         }
 
-        int pad = Px(14), w = panel.Width - pad * 2, barH = Px(10), y = pad;
-        using var font = new Font("Segoe UI Semibold", 8.5f * S, FontStyle.Regular, GraphicsUnit.Pixel);
+        int pad = Px(14), w = panel.Width - pad * 2, barH = Px(7), y = pad;
+        using var font = new Font("Segoe UI Semibold", 11.5f * S, FontStyle.Regular, GraphicsUnit.Pixel);
         using var labelBrush = new SolidBrush(LabelCol);
         for (int i = 0; i < 3; i++)
         {
             g.DrawString(Str.T(Keys[i]), font, labelBrush, pad - 1, y - Px(1));
-            DrawBar(g, new Rectangle(pad, y + Px(16), w, barH), values[i] / 100.0, Colors[i]);
-            y += Px(32) + Px(6);
+            DrawBar(g, new Rectangle(pad, y + Px(21), w, barH), values[i] / 100.0, Colors[i]);
+            y += Px(36);
         }
         return bmp;
     }

@@ -45,7 +45,7 @@ sealed class PetWindow : Form
     int frame, idleTimer, sleepTick;
     bool sleepManual;
     StatsWindow? statsWin;
-    long hoverOffAt;   // sleep asked by the user: no automatic wake-up
+    long hoverOffAt, hoverSince;   // sleep asked by the user: no automatic wake-up
     long lockUntil, nextJumpAt, lastCursorAt, lastMoveAt, fastSince;
     readonly Queue<long> clicks = new();
     Native.POINT cursor;
@@ -177,22 +177,30 @@ sealed class PetWindow : Form
 
     double DistTo(Native.POINT p) => Math.Sqrt(Math.Pow(p.X - x - size / 2.0, 2) + Math.Pow(p.Y - y - size / 2.0, 2));
 
-    // Stats panel while the mouse is over the cat (an opaque pixel, not just its box); hides shortly after leaving
+    // Stats panel: the mouse must stay on the cat (an opaque pixel, not just its box) for HoverDelay;
+    // it fades out shortly after the mouse leaves
+    const int HoverDelay = 3000;
+
     void UpdateHover()
     {
         bool over = false;
         int lx = cursor.X - Left, ly = cursor.Y - Top;
         if (Visible && lx >= 0 && ly >= 0 && lx < size && ly < size) over = buf.GetPixel(lx, ly).A > 0;
+        long now = Now;
         if (over)
         {
             hoverOffAt = 0;
-            statsWin ??= new StatsWindow(S);
-            statsWin.ShowAbove(new Rectangle(Left, Top, size, size), hunger, happiness, energy);
+            if (hoverSince == 0) hoverSince = now;
+            if (now - hoverSince >= HoverDelay)
+            {
+                statsWin ??= new StatsWindow(S);
+                statsWin.ShowAbove(new Rectangle(Left, Top, size, size), hunger, happiness, energy);
+            }
         }
-        else if (statsWin is { Visible: true })
+        else
         {
-            if (hoverOffAt == 0) hoverOffAt = Now + 350;
-            else if (Now >= hoverOffAt) { statsWin.HidePanel(); hoverOffAt = 0; }
+            if (hoverOffAt == 0) hoverOffAt = now;
+            else if (now - hoverOffAt >= 350) { hoverSince = 0; statsWin?.HidePanel(); }   // short wobbles off the sprite don't reset the wait
         }
     }
 
