@@ -2,11 +2,15 @@
 
 Tamagotchi-style virtual pets that live on your Windows desktop. It starts with cats: they walk, sleep, play with a ball, eat from a bowl, get stroked, and groom or fight each other. More kinds of pets are planned. It is a native program (.NET 8, WinForms) built to be as light as possible: at rest it uses a few MB of memory and almost no CPU.
 
-<video src="docs/brag.mp4" poster="docs/img/brag.jpg" controls muted loop playsinline width="100%"></video>
+<p align="center"><a href="docs/brag.mp4"><img src="docs/img/preview.gif" alt="Tam-a-Pet preview (click for the video with sound)" width="100%"></a></p>
 
-[▶ Watch the 60 s preview](docs/brag.mp4)
+<p align="center"><sub>Click the preview to watch the 60 s video with sound.</sub></p>
 
-![Customising a pet and its objects](docs/img/custom.jpg)
+<p align="center">
+  <img src="docs/img/needs.jpg" alt="Pets using their bowl, bed and ball" width="32%">
+  <img src="docs/img/fight.jpg" alt="Two cats having a fight" width="32%">
+  <img src="docs/img/custom.jpg" alt="Customising a pet and its objects" width="32%">
+</p>
 
 > **Status: 0.0.1 (pre-release).** Work in progress: more features and bug fixes are coming before the first real release.
 
@@ -36,6 +40,10 @@ The language of the app can be changed in *Settings → General → Language*.
 
 Your data (settings, stats, object positions) lives in `%APPDATA%\Tam-a-Pet\settings.ini`.
 
+## Made with AI
+
+Tam-a-Pet is built with the help of AI ([Claude](https://claude.ai) by Anthropic).
+
 ## Build from source
 
 You need the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
@@ -52,4 +60,4 @@ The installer is the app itself: an executable named `TamAPet-Setup*.exe` shows 
 
 ## Credits
 
-Tam-a-Pet is built with the help of AI ([Claude](https://claude.ai) by Anthropic). Sounds from [OpenGameArt.org](https://opengameart.org) (CC0): see [CREDITS.md](CREDITS.md). Code licence: [MIT](LICENSE).
+Sounds from [OpenGameArt.org](https://opengameart.org) (CC0): see [CREDITS.md](CREDITS.md). Code licence: [MIT](LICENSE).
