@@ -35,6 +35,7 @@ sealed class PetApp : IDisposable
         tray.Visible = true;
 
         Cfg.OnTopChanged += () => { foreach (var c in PetWindow.All) c.ApplyOnTop(Cfg.OnTop); };
+        Cfg.MonitorChanged += () => { foreach (var c in PetWindow.All.ToList()) c.ApplyMonitor(); };
         Cfg.CatAdded += StartCat;
         Cfg.ShareChanged += PetWindow.ApplyShare;
         Cfg.CatRemoved += p => PetWindow.Find(p.Index)?.Shutdown();

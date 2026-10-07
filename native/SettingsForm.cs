@@ -490,6 +490,43 @@ sealed class SettingsForm : Form
             vc.Height = MixRow(vc, Str.T("mixer.pet"), P(16), P(14), w - P(32), () => cat.Volume, v => cat.Volume = v, null, false, cat.Index, "mew", false) + P(2);
             y += vc.Height + P(14);
 
+            // monitor (only with more than one)
+            if (Screens.Monitors.Length > 1)
+            {
+                var mon = AddCard(pad, y, w);
+                int mh = RowHeader(mon, Str.T("monitor.label"), Str.T("monitor.hint"), P(16), P(12), w - P(32) - P(200));
+                string MonLabel(string value)
+                {
+                    if (value == "free") return Str.T("monitor.free");
+                    var ms = Screens.Monitors;
+                    var m = ms.FirstOrDefault(q => q.Name == value); if (m.Name == null) m = ms.FirstOrDefault(q => q.Primary);
+                    var digits = new string(m.Name.Reverse().TakeWhile(char.IsDigit).Reverse().ToArray());
+                    return string.Format(Str.T("monitor.n"), digits == "" ? "?" : digits) + (m.Primary ? " " + Str.T("monitor.main") : "");
+                }
+                var catP = cat;
+                var mdrop = new Pill(this) { Text = MonLabel(cat.Monitor) + "  ▾", Kind = PillKind.Seg, Bounds = new Rectangle(P(16) + w - P(32) - P(190), P(12), P(190), P(32)) };
+                mdrop.Click += (_, _) =>
+                {
+                    var m = new ContextMenuStrip();
+                    string curName = Screens.Monitors.FirstOrDefault(q => q.Name == catP.Monitor).Name ?? Screens.Monitors.FirstOrDefault(q => q.Primary).Name;
+                    var freeItem = new ToolStripMenuItem(Str.T("monitor.free")) { Checked = catP.Monitor == "free" };
+                    freeItem.Click += (_, _) => { Cfg.SetMonitor(catP, "free"); Build(); };
+                    m.Items.Add(freeItem);
+                    foreach (var mm in Screens.Monitors)
+                    {
+                        var name = mm.Name;
+                        var it = new ToolStripMenuItem(MonLabel(name)) { Checked = catP.Monitor != "free" && name == curName };
+                        it.Click += (_, _) => { Cfg.SetMonitor(catP, name); Build(); };
+                        m.Items.Add(it);
+                    }
+                    MenuRenderer.Apply(m);
+                    m.Show(mdrop, new Point(0, mdrop.Height + P(4)));
+                };
+                mon.Controls.Add(mdrop);
+                mon.Height = Math.Max(mh, P(12) + P(32)) + P(14);
+                y += mon.Height + P(14);
+            }
+
             // character
             view.Controls.Add(Lbl(Str.T("char.title"), fBold, muted, pad + P(2), y, w));
             y += P(28);
@@ -708,7 +745,7 @@ sealed class SettingsForm : Form
             parent.Controls.Add(sw);
             sx += size + gap;
         }
-        var custom = new Swatch(this) { Fill = current, Selected = !matched, Plus = true, Bounds = new Rectangle(sx, sy, size, size) };
+        var custom = new Swatch(this) { Fill = matched ? track : current, Selected = !matched, Plus = true, Bounds = new Rectangle(sx, sy, size, size) };
         custom.Click += (_, _) =>
         {
             using var dlg = new ColorPicker(this, current);

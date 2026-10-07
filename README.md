@@ -30,6 +30,7 @@ Both already include everything (even .NET): nothing else to install. Requiremen
 ## What it does
 
 - **Multiple cats** (up to 8 at once), each with its own name, character (balanced, playful, lazy, greedy, chatty, attention-seeking), fur and eye colours, patterns (tabby, patched, calico) and stats: hunger, happiness, energy.
+- **Multiple monitors**: each pet can live on one monitor of your choice, or roam freely between all of them; its objects stay with it.
 - **Objects**: bowl, bed and ball, each with its own colour; the cats use them when they need to. They can be shared between all the cats.
 - **Interactions**: click and stroke (hold and move slowly), a fast mouse near the cat makes it jump, too many clicks make it angry. Between themselves the cats groom or fight.
 - **Real sounds** (meows, purring, chewing, ball) with a mixer: master volume, per cat and per kind of sound.

@@ -136,7 +136,7 @@ sealed class PetWindow : Form
         TopMost = Cfg.OnTop;
         StartPosition = FormStartPosition.Manual;
         ClientSize = new Size(size, size);
-        var wa = Screen.PrimaryScreen!.WorkingArea;
+        var wa = Home ?? Screen.PrimaryScreen!.WorkingArea;
         x = wa.Left + wa.Width / 2 - size / 2 + (cat.Index % 2 == 0 ? -1 : 1) * (0.7 + 0.5 * (cat.Index / 2)) * size; y = wa.Bottom - size;   // the two cats start side by side
         Location = new Point((int)x, (int)y);
 
@@ -225,8 +225,8 @@ sealed class PetWindow : Form
         if (existing != null) { existing.Close(); return; }
         var o = Owner;
         var p = new TaskbarProp(isBed, Unit, o.cat);
-        var scr = Screens.WorkAreaAt((int)(x + size / 2.0), (int)(y + size / 2.0));
-        if (left is int l) p.PlaceNear(l + p.Width / 2, Screens.WorkAreaAt(l + p.Width / 2, Screen.PrimaryScreen!.Bounds.Bottom - 5));   // restored position
+        var scr = ObjHome ?? Screens.WorkAreaAt((int)(x + size / 2.0), (int)(y + size / 2.0));
+        if (left is int l) p.PlaceNear(l + p.Width / 2, ObjHome ?? Screens.WorkAreaAt(l + p.Width / 2, Screen.PrimaryScreen!.Bounds.Bottom - 5));   // restored position
         else p.PlaceNear((int)(x + size / 2.0 + (isBed ? -1.4 : 1.2) * size), scr);
         p.FormClosed += (_, _) =>
         {
@@ -538,10 +538,35 @@ sealed class PetWindow : Form
 
     // ---- geometry -------------------------------------------------------------------------------
 
+    // The monitor this pet is tied to (null = it may roam every monitor); its objects follow the objects' owner
+    Rectangle? Home => Screens.HomeOf(cat.Monitor);
+    Rectangle? ObjHome => Screens.HomeOf(Owner.cat.Monitor);
+
     Rectangle AreaFor(double px, double py)
     {
-        var wa = Screens.WorkAreaAt((int)px, (int)py);
-        return new Rectangle(wa.Left, wa.Top, Math.Max(0, wa.Width - size), Math.Max(0, wa.Height - size));
+        var wa = Home ?? Screens.WorkAreaAt((int)px, (int)py);
+        return Shrink(wa);
+    }
+    Rectangle Shrink(Rectangle wa) => new Rectangle(wa.Left, wa.Top, Math.Max(0, wa.Width - size), Math.Max(0, wa.Height - size));
+
+    // The monitor setting changed: a pet tied to a monitor goes there, and so do its objects
+    public void ApplyMonitor()
+    {
+        if (Home is Rectangle h && Screens.WorkAreaAt((int)(x + size / 2.0), (int)(y + size / 2.0)) != h)
+        {
+            if (social != "") EndSocial();
+            Target = null; if (state is "walk" or "run") state = "idle";
+            x = h.Left + h.Width / 2.0 - size / 2.0; y = h.Bottom - size;
+            Location = new Point((int)x, (int)y);
+        }
+        if (Owner == this && ObjHome is Rectangle oh)
+        {
+            int cx = oh.Left + oh.Width / 2;
+            if (ownBowl is { } b1 && Screens.WorkAreaAt(b1.Center.X, b1.Center.Y) != oh) b1.PlaceNear(cx - size, oh);
+            if (ownBed is { } b2 && Screens.WorkAreaAt(b2.Center.X, b2.Center.Y) != oh) b2.PlaceNear(cx + size, oh);
+            if (ownBall is { } b3 && Screens.WorkAreaAt(b3.Center.X, b3.Center.Y) != oh) b3.Restore(cx, oh.Top + oh.Height / 3);
+            SaveObjects();
+        }
     }
 
     (double, double) Clamp(double px, double py)
@@ -552,7 +577,7 @@ sealed class PetWindow : Form
 
     (double, double) RandomTarget()
     {
-        var b = AreaFor(x + size / 2, y + size / 2);
+        var b = Home == null ? Shrink(Screens.RandomArea(rnd)) : AreaFor(x + size / 2, y + size / 2);   // free pets pick any monitor
         double tx = x, ty = y;
         for (int i = 0; i < 10; i++)
         {

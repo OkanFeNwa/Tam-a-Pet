@@ -32,6 +32,7 @@ sealed class CatProfile
     public Color BowlColor = Color.FromArgb(0xE0, 0x52, 0x5A), BedColor = Color.FromArgb(0x7F, 0x95, 0xF0), BallColor = Color.FromArgb(0xFF, 0x7A, 0x45);
     public string Character;
     public double Hunger = 100, Happiness = 100, Energy = 100;
+    public string Monitor = "";   // where the pet (and its objects) live: "" = the main monitor, "free" = every monitor, or a monitor's device name
     public string Bowl = "", Bed = "", Ball = "";   // saved objects: "x" (bowl, bed) or "x,y" (ball); empty = not summoned
 
     public CatProfile(int index)
@@ -103,6 +104,9 @@ static class Cfg
     // after changing something in a cat's profile: save and tell the cat
     public static void Changed(CatProfile p) { Save(); ProfileChanged?.Invoke(p); }
 
+    public static event Action? MonitorChanged;
+    public static void SetMonitor(CatProfile p, string monitor) { p.Monitor = monitor; Save(); MonitorChanged?.Invoke(); }
+
     // A new cat takes the lowest free slot (its window, sounds and settings keys are tied to it)
     public static CatProfile? AddCat()
     {
@@ -162,6 +166,7 @@ static class Cfg
                     if (key == "hunger") p.Hunger = st; else if (key == "happiness") p.Happiness = st; else p.Energy = st;
                 }
                 break;
+            case "monitor": p.Monitor = val; break;
             case "bowl": p.Bowl = val; break;
             case "bed": p.Bed = val; break;
             case "ball": p.Ball = val; break;
@@ -243,6 +248,7 @@ static class Cfg
                 lines.Add($"{k}hunger={D(p.Hunger)}");
                 lines.Add($"{k}happiness={D(p.Happiness)}");
                 lines.Add($"{k}energy={D(p.Energy)}");
+                if (p.Monitor != "") lines.Add($"{k}monitor={p.Monitor}");
                 if (p.Bowl != "") lines.Add($"{k}bowl={p.Bowl}");
                 if (p.Bed != "") lines.Add($"{k}bed={p.Bed}");
                 if (p.Ball != "") lines.Add($"{k}ball={p.Ball}");
@@ -291,7 +297,7 @@ static class Str
             ["tray.settings"] = "Impostazioni...", 
             ["tray.exit"] = "Esci",
             ["title"] = "Impostazioni", ["nav.general"] = "Generale", ["nav.cat"] = "Gatto",
-            ["language"] = "Lingua", ["language.hint"] = "Lingua dell'interfaccia", ["reset"] = "Ripristina predefiniti",
+            ["language"] = "Lingua", ["language.hint"] = "Lingua dell'interfaccia", ["monitor.label"] = "Monitor", ["monitor.hint"] = "Dove vive questo pet con i suoi oggetti", ["monitor.free"] = "Libero (tutti)", ["monitor.n"] = "Monitor {0}", ["monitor.main"] = "(principale)", ["reset"] = "Ripristina predefiniti",
             
             ["group.mouse"] = "Mouse", ["group.movement"] = "Movimento",
             ["nearRange.label"] = "Distanza \"mouse vicino\"", ["nearRange.hint"] = "Entro questa distanza il gatto si accorge del mouse", ["nearRange.unit"] = "px",
@@ -320,7 +326,7 @@ static class Str
             ["tray.settings"] = "Settings...", 
             ["tray.exit"] = "Exit",
             ["title"] = "Settings", ["nav.general"] = "General", ["nav.cat"] = "Cat",
-            ["language"] = "Language", ["language.hint"] = "Interface language", ["reset"] = "Reset to defaults",
+            ["language"] = "Language", ["language.hint"] = "Interface language", ["monitor.label"] = "Monitor", ["monitor.hint"] = "Where this pet lives, with its objects", ["monitor.free"] = "Free (all)", ["monitor.n"] = "Monitor {0}", ["monitor.main"] = "(main)", ["reset"] = "Reset to defaults",
             
             ["group.mouse"] = "Mouse", ["group.movement"] = "Movement",
             ["nearRange.label"] = "\"Mouse nearby\" distance", ["nearRange.hint"] = "Within this distance the cat notices the mouse", ["nearRange.unit"] = "px",

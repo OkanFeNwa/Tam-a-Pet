@@ -50,16 +50,44 @@ static class Native
 // Work areas of the monitors, cached: Screen.FromPoint enumerates the monitors and allocates on every call
 static class Screens
 {
+    static (string Name, Rectangle Area, bool Primary)[] named = Array.Empty<(string, Rectangle, bool)>();
     static Rectangle[] areas = Load();
     static long loadedAt = Environment.TickCount64;
 
-    static Rectangle[] Load() => System.Windows.Forms.Screen.AllScreens.Select(s => s.WorkingArea).ToArray();
+    static Rectangle[] Load()
+    {
+        var all = System.Windows.Forms.Screen.AllScreens;
+        named = all.Select(s => (s.DeviceName, s.WorkingArea, s.Primary)).ToArray();
+        return all.Select(s => s.WorkingArea).ToArray();
+    }
+
+    static void Refresh()
+    {
+        long now = Environment.TickCount64;
+        if (now - loadedAt > 5000) { areas = Load(); loadedAt = now; }   // picks up taskbar / monitor changes
+    }
+
+    // The monitors (device name, work area, is it the main one), in the system's order
+    public static (string Name, Rectangle Area, bool Primary)[] Monitors { get { Refresh(); return named; } }
+
+    // The work area a pet is tied to: "free" = none (it may roam every monitor); a device name = that monitor;
+    // "" or a monitor that is no longer connected = the main one
+    public static Rectangle? HomeOf(string monitor)
+    {
+        if (monitor == "free") return null;
+        Refresh();
+        var n = named;
+        foreach (var m in n) if (m.Name == monitor) return m.Area;
+        foreach (var m in n) if (m.Primary) return m.Area;
+        return n[0].Area;
+    }
+
+    public static Rectangle RandomArea(Random r) { Refresh(); var a = areas; return a[r.Next(a.Length)]; }
 
     // Work area of the monitor containing (x, y), or the nearest one
     public static Rectangle WorkAreaAt(int x, int y)
     {
-        long now = Environment.TickCount64;
-        if (now - loadedAt > 5000) { areas = Load(); loadedAt = now; }   // picks up taskbar / monitor changes
+        Refresh();
         var a = areas;
         Rectangle best = a[0];
         double bestD = double.MaxValue;

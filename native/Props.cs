@@ -247,7 +247,7 @@ sealed class TaskbarProp : PropWindow
 
     protected override Point Constrain(Point p)
     {
-        var wa = Area(Cursor.Position);
+        var wa = Screens.HomeOf(cat.Monitor) ?? Area(Cursor.Position);   // a pet tied to a monitor keeps its objects there
         return new Point(Math.Clamp(p.X, wa.Left, wa.Right - Width), wa.Bottom - Height);
     }
 
@@ -344,7 +344,7 @@ sealed class BallWindow : PropWindow
         if (held) return;
         long now = Environment.TickCount64;
         double dt = Math.Clamp((now - last) / 1000.0, 0, 0.05); last = now;
-        if (now - waAt > 250) { wa = Screens.WorkAreaAt((int)x + Width / 2, (int)y + Height / 2); waAt = now; }
+        if (now - waAt > 250) { wa = Screens.HomeOf(cat.Monitor) ?? Screens.WorkAreaAt((int)x + Width / 2, (int)y + Height / 2); waAt = now; }
         double left = wa.Left, right = wa.Right - Width, top = wa.Top, bottom = wa.Bottom - Height;
 
         vy += Gravity * dt;
