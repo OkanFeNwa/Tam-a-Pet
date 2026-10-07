@@ -30,12 +30,15 @@ static class Audio
     [DllImport("winmm.dll")] static extern int waveOutOpen(out IntPtr hwo, uint device, ref WAVEFORMATEX fmt, IntPtr callback, IntPtr instance, uint flags);
     [DllImport("winmm.dll")] static extern int waveOutPrepareHeader(IntPtr hwo, IntPtr hdr, int size);
     [DllImport("winmm.dll")] static extern int waveOutWrite(IntPtr hwo, IntPtr hdr, int size);
+    [DllImport("winmm.dll")] static extern uint timeBeginPeriod(uint ms);
+    [DllImport("winmm.dll")] static extern uint timeEndPeriod(uint ms);
 
     const uint WAVE_MAPPER = 0xFFFFFFFF, CALLBACK_EVENT = 0x50000;
     const int HeaderSize = 48, FlagsOffset = 24, WHDR_DONE = 1;
-    // 48 kHz is what Windows mixes at by default (no sample-rate conversion in the driver); 16 ms buffers x 3 keep the
-    // stream steady (very small buffers glitch/"tremble") while a new sound still starts within ~50 ms
-    const int OutRate = 48000, BufSamples = 768, Buffers = 3, MaxBoings = 12;
+    // 48 kHz is what Windows mixes at by default (no sample-rate conversion in the driver). Buffers of 32 ms x 4 give the
+    // stream ~128 ms of slack: slower PCs, busy CPUs and Bluetooth/USB outputs refill late and small buffers made the sound
+    // stutter there. A new sound still starts within ~100 ms, which is fine for a pet.
+    const int OutRate = 48000, BufSamples = 1536, Buffers = 4, MaxBoings = 12;
 
     // ---- state: touched by the audio thread only (except the volatile flag) ---------------------
     static readonly Dictionary<string, Clip> clips = new();
@@ -68,7 +71,7 @@ static class Audio
         {
             if (worker == null)
             {
-                worker = new Thread(Run) { IsBackground = true, Name = "audio", Priority = ThreadPriority.AboveNormal };   // steady refills
+                worker = new Thread(Run) { IsBackground = true, Name = "audio", Priority = ThreadPriority.Highest };   // steady refills
                 worker.Start();
             }
         }
@@ -101,6 +104,14 @@ static class Audio
         var mix = new float[BufSamples];
         var pcm = new short[BufSamples];
 
+        // Decode every recording now (a first-time decode in the middle of playback stalls the stream on slow PCs)
+        // and run the mixer once so it is already compiled and optimised when the first sound plays
+        foreach (var n in typeof(Audio).Assembly.GetManifestResourceNames().Where(n => n.StartsWith("snd.")))
+            try { Load(n.Substring(4)); } catch { }
+        Repeat("cat_angry", 2);
+        Mix(mix, pcm);
+        bool timerRaised = false;
+
         while (true)
         {
             while (jobs.TryDequeue(out var job))
@@ -115,6 +126,7 @@ static class Audio
             }
             if (voices.Count > 0 && !anyQueued && streaming) underruns++;   // the device ran dry while sounds were playing: an audible glitch
             streaming = voices.Count > 0 || anyQueued;
+            if (streaming != timerRaised) { if (streaming) timeBeginPeriod(1); else timeEndPeriod(1); timerRaised = streaming; }   // 1 ms timer only while sound plays: steadier refills
             for (int i = 0; i < Buffers; i++)
             {
                 if (queued[i] || voices.Count == 0) continue;
@@ -124,11 +136,12 @@ static class Audio
                 queued[i] = true; buffersWritten++;
                 voices.RemoveAll(v => v.Dead);
             }
-            wake.WaitOne(voices.Count > 0 ? 25 : Timeout.Infinite);
+            wake.WaitOne(voices.Count > 0 || anyQueued ? 10 : Timeout.Infinite);
         }
     }
 
     // Sum every voice into one buffer
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]   // no slow first-run (tier-0) code
     static void Mix(float[] mix, short[] outPcm)
     {
         Array.Clear(mix);
