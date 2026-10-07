@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag like v0.1.0 (the same number as <Version> in native/TamAPet.csproj) to build and publish a release
+# Push a tag like v0.0.1 (the same number as <Version> in native/TamAPet.csproj) to build and publish a release
 on:
   push:
     tags: ['v*']

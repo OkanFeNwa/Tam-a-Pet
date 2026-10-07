@@ -72,8 +72,7 @@ static class Cfg
         ["wander"] = 0.08, ["walkSpeed"] = 2, ["cycle"] = 1328
     };
     public static Dictionary<string, double> V = new(Defaults);
-    [System.Runtime.InteropServices.DllImport("kernel32.dll")] static extern ushort GetUserDefaultUILanguage();
-    public static string Lang = (GetUserDefaultUILanguage() & 0x3FF) == 0x10 ? "it" : "en";   // first run: the language of Windows
+    public static string Lang = "en";   // English is the main language; the user can switch to Italian in the settings
     public static bool AutoUpdate = true;   // look for a newer release at start (installing it is always manual)
     public const int MaxCats = 8;
     public static readonly List<CatProfile> Cats = new() { new(0) };   // every cat the user has (each with its own window); the first one has Index 0
@@ -334,7 +333,7 @@ static class Str
         }
     };
 
-    public static string T(string key) => All.GetValueOrDefault(Cfg.Lang, All["it"]).GetValueOrDefault(key, key);
+    public static string T(string key) => All.GetValueOrDefault(Cfg.Lang, All["en"]).GetValueOrDefault(key, key);
 }
 
 // "Start with Windows": a value in the per-user Run key (no admin rights needed)

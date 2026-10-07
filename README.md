@@ -1,63 +1,65 @@
 # Tam-a-Pet
 
-Pet virtuali in stile tamagotchi che vivono sul desktop di Windows. Si parte dai gatti: camminano, dormono, giocano con la pallina, mangiano dalla ciotola, si fanno accarezzare e litigano o si fanno le coccole tra loro. È un programma nativo (.NET 8, WinForms) pensato per essere il più leggero possibile: a riposo usa pochi MB di memoria e quasi nessuna CPU.
+Tamagotchi-style virtual pets that live on your Windows desktop. It starts with cats: they walk, sleep, play with a ball, eat from a bowl, get stroked, and groom or fight each other. More kinds of pets are planned. It is a native program (.NET 8, WinForms) built to be as light as possible: at rest it uses a few MB of memory and almost no CPU.
 
-*Tamagotchi-style virtual pets living on your Windows desktop (cats first). Native .NET 8 app, very light on memory and CPU. See the [English summary](#english) below.*
+*Italiano: pet virtuali in stile tamagotchi sul desktop di Windows. Vedi il [riassunto in italiano](#italiano) in fondo.*
 
-[![Guarda il video (18 s)](docs/img/brag.jpg)](docs/brag.mp4)
+[![Watch the video](docs/img/brag.jpg)](docs/brag.mp4)
 
-![Impostazioni: i gatti](docs/img/cats.png)
+![Settings: the cats](docs/img/cats.png)
 
-## Scarica
+> **Status: 0.0.1 (pre-release).** Work in progress: more features and bug fixes are coming before the first real release.
 
-Dalla pagina [Releases](../../releases/latest):
+## Download
 
-| File | Cos'è |
+From the [Releases](../../releases/latest) page:
+
+| File | What it is |
 |---|---|
-| **TamAPet-Setup.exe** | Installer: installa per il tuo utente (nessun permesso di amministratore), crea la voce nel menu Start, il collegamento sul desktop (a scelta), l'avvio con Windows (a scelta) e il disinstallatore in *App installate*. |
-| **TamAPet-Portable.exe** | Versione portatile: un solo file, si avvia dove vuoi, non installa nulla. |
+| **TamAPet-Setup.exe** | Installer: installs for your user (no administrator rights), creates the Start menu entry, the desktop shortcut (optional), start with Windows (optional) and the uninstaller in *Installed apps*. |
+| **TamAPet-Portable.exe** | Portable version: a single file, runs from anywhere, installs nothing. |
 
-Entrambi contengono già tutto (anche .NET): non serve installare altro. Requisiti: Windows 10/11 a 64 bit.
+Both already include everything (even .NET): nothing else to install. Requirements: Windows 10/11, 64-bit.
 
-> Windows SmartScreen può avvisare che l'app "non è riconosciuta", perché l'eseguibile non è firmato digitalmente: *Ulteriori informazioni → Esegui comunque*. I checksum SHA-256 sono nel file `SHA256SUMS.txt` della release.
+> Windows SmartScreen may warn that the app is "not recognised", because the executable is not digitally signed: *More info → Run anyway*. SHA-256 checksums are in `SHA256SUMS.txt` in the release.
 
-## Cosa fa
+## What it does
 
-- **Più gatti** (fino a 8), ognuno con nome, carattere (equilibrato, giocherellone, pigro, goloso, chiacchierone, cerca attenzioni), colori di pelo e occhi, varianti (tigrato, a chiazze, calico) e statistiche proprie: fame, felicità, energia.
-- **Oggetti**: ciotola, cuccia e pallina, ognuno con il proprio colore; i gatti li usano quando ne hanno bisogno. Si possono condividere tra tutti i gatti.
-- **Interazioni**: clic e coccole (tieni premuto e muovi piano), il mouse veloce vicino al gatto lo fa saltare, troppi clic lo fanno arrabbiare. Tra loro i gatti si leccano o litigano.
-- **Suoni** veri (miagolii, fusa, masticare, pallina) con un mixer: volume generale, per gatto e per tipo di suono.
-- **Impostazioni** dall'icona nell'area di notifica: sempre in primo piano, avvio con Windows, lingua (italiano / inglese), aggiornamenti.
-- **Aggiornamenti**: all'avvio controlla in silenzio se c'è una versione più nuova su GitHub e te lo dice; scarica e installa **solo quando premi il pulsante** in *Impostazioni → Generale → Informazioni*. Si può disattivare il controllo automatico.
+- **Multiple cats** (up to 8), each with its own name, character (balanced, playful, lazy, greedy, chatty, attention-seeking), fur and eye colours, patterns (tabby, patched, calico) and stats: hunger, happiness, energy.
+- **Objects**: bowl, bed and ball, each with its own colour; the cats use them when they need to. They can be shared between all the cats.
+- **Interactions**: click and stroke (hold and move slowly), a fast mouse near the cat makes it jump, too many clicks make it angry. Between themselves the cats groom or fight.
+- **Real sounds** (meows, purring, chewing, ball) with a mixer: master volume, per cat and per kind of sound.
+- **Settings** from the notification-area icon: always on top, start with Windows, language (English / Italian), updates.
+- **Updates**: at start it quietly checks GitHub for a newer version and tells you; it downloads and installs **only when you press the button** in *Settings → General → About*. The automatic check can be turned off.
 
-I dati (impostazioni, statistiche, posizione degli oggetti) stanno in `%APPDATA%\Tam-a-Pet\settings.ini`.
+English is the default language; you can switch to Italian in *Settings → General → Language*.
 
-## Compilare dal sorgente
+Your data (settings, stats, object positions) lives in `%APPDATA%\Tam-a-Pet\settings.ini`.
 
-Serve l'[SDK .NET 8](https://dotnet.microsoft.com/download/dotnet/8.0).
+## Build from source
+
+You need the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 
 ```powershell
 cd native
-dotnet build -c Release          # per provarla: native\bin\Release\net8.0-windows\TamAPet.exe
-.\publish.ps1                    # i due eseguibili da distribuire in native\dist
+dotnet build -c Release          # to try it: native\bin\Release\net8.0-windows\TamAPet.exe
+.\publish.ps1                    # the two executables to distribute, in native\dist
 ```
 
-Per fare una release: alza `<Version>` in `native/TamAPet.csproj`, aggiorna `CHANGELOG.md`, poi crea e pusha il tag (`git tag v0.1.0 && git push origin v0.1.0`): il workflow `.github/workflows/release.yml` compila e pubblica la release con installer, versione portatile e checksum.
+To make a release: raise `<Version>` in `native/TamAPet.csproj`, update `CHANGELOG.md`, then create and push the tag (`git tag v0.0.1 && git push origin v0.0.1`): the `.github/workflows/release.yml` workflow builds and publishes the release with installer, portable version and checksums.
 
-L'installer è l'app stessa: un eseguibile chiamato `TamAPet-Setup*.exe` mostra la procedura di installazione (vedi `native/Installer.cs`); l'app installata con `--uninstall` si rimuove.
+The installer is the app itself: an executable named `TamAPet-Setup*.exe` shows the install wizard (see `native/Installer.cs`); the installed app removes itself with `--uninstall`.
 
-La cartella principale contiene anche il primo prototipo in Electron (`main.js`, `index.html`, ...), conservato solo come riferimento: l'app vera è in `native/`.
+The root folder also holds the first Electron prototype (`main.js`, `index.html`, ...), kept only for reference: the real app is in `native/`.
 
-## Crediti
+## Credits
 
-Suoni da [OpenGameArt.org](https://opengameart.org) (CC0): vedi [CREDITS.md](CREDITS.md). Licenza del codice: [MIT](LICENSE).
+Sounds from [OpenGameArt.org](https://opengameart.org) (CC0): see [CREDITS.md](CREDITS.md). Code licence: [MIT](LICENSE).
 
-## English
+## Italiano
 
-Tam-a-Pet puts virtual pets on your Windows desktop, tamagotchi style. It starts with cats: one or more of them. They wander, sleep, play with a ball, eat from a bowl, get stroked, and groom or fight each other. Each cat has its own name, character, colours, patterns (tabby, patched, calico), needs, sounds and objects; there is a mixer for the volumes.
+Tam-a-Pet mette dei pet virtuali sul desktop di Windows, in stile tamagotchi. Si parte dai gatti: camminano, dormono, giocano con la pallina, mangiano dalla ciotola, si fanno accarezzare e litigano o si fanno le coccole tra loro. Ogni gatto ha nome, carattere, colori, varianti, bisogni, suoni e oggetti propri, con un mixer per i volumi.
 
-**Download** from [Releases](../../releases/latest): `TamAPet-Setup.exe` (per-user installer, no admin rights) or `TamAPet-Portable.exe` (single file, nothing installed). Both include .NET; Windows 10/11 x64. The exe is unsigned, so SmartScreen may warn you (*More info → Run anyway*); checksums are in `SHA256SUMS.txt`.
+**Scarica** da [Releases](../../releases/latest): `TamAPet-Setup.exe` (installer per il tuo utente, senza permessi di amministratore) oppure `TamAPet-Portable.exe` (un solo file, non installa nulla). Entrambi includono .NET; Windows 10/11 a 64 bit. L'eseguibile non è firmato, quindi SmartScreen può avvisare (*Ulteriori informazioni → Esegui comunque*); i checksum sono in `SHA256SUMS.txt`.
 
-**Updates:** the app quietly checks GitHub at start and tells you when a newer release exists; it downloads and installs only when you press the button in *Settings → General → About* (the automatic check can be turned off).
-
-**Build:** `cd native && dotnet build -c Release`; `./publish.ps1` makes both executables. Releases are built by GitHub Actions when a `vX.Y.Z` tag is pushed.
+**Aggiornamenti:** all'avvio controlla in silenzio su GitHub e te lo dice; scarica e installa solo quando premi il pulsante in *Impostazioni → Generale → Informazioni*. La lingua predefinita è l'inglese; si cambia in *Impostazioni → Generale → Lingua*.
