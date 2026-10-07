@@ -118,6 +118,9 @@ abstract class PropWindow : Form
     protected virtual void OnDrop() { }
     protected virtual void OnDragged(Point p) { }
 
+    public event Action? Placed;   // it was put down (or came to rest): its position is worth saving
+    protected void RaisePlaced() => Placed?.Invoke();
+
     public void Reassert() => Native.SetWindowPos(Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);   // HWND_TOPMOST
 
     protected override void OnMouseDown(MouseEventArgs e)
@@ -160,6 +163,8 @@ abstract class PropWindow : Form
 sealed class TaskbarProp : PropWindow
 {
     public readonly bool IsBed;
+
+    protected override void OnDrop() => RaisePlaced();
 
     public TaskbarProp(bool bed, int u) : base(bed ? PixelArt.Render(PixelArt.Bed, PixelArt.BedPal, u) : PixelArt.Render(PixelArt.Bowl, PixelArt.BowlPal, u))
     {
@@ -223,6 +228,14 @@ sealed class BallWindow : PropWindow
 
     public void Kick(double kx, double ky) { vx = kx; vy = ky; Start(); }
 
+    // Back where it was left (it falls if that was in the air)
+    public void Restore(int px, int py)
+    {
+        x = px; y = py; vx = vy = 0;
+        Location = new Point(px, py);
+        Start();
+    }
+
     void Start() { last = Environment.TickCount64; if (!physT.Enabled) physT.Start(); }
 
     protected override void OnGrab() { held = true; physT.Stop(); trail.Clear(); vx = vy = 0; }
@@ -270,7 +283,7 @@ sealed class BallWindow : PropWindow
         }
         if (floor && vy == 0) vx *= Math.Max(0, 1 - 2.5 * dt);   // rolling friction
         Location = new Point((int)Math.Round(x), (int)Math.Round(y));
-        if (floor && vy == 0 && Math.Abs(vx) < 8) { vx = 0; physT.Stop(); }
+        if (floor && vy == 0 && Math.Abs(vx) < 8) { vx = 0; physT.Stop(); RaisePlaced(); }
     }
 
     protected override void Dispose(bool disposing)

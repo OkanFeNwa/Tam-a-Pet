@@ -56,6 +56,7 @@ sealed class PetWindow : Form
     Goal goal;                    // what the cat is walking to (cleared whenever it is sent elsewhere)
     bool keepGoal;
     long chaseUntil, kickCooldown, lastKickAt;
+    bool shuttingDown;   // the app is quitting: closing the objects must not erase their saved state
     long noInteractUntil, fleeAt, angryCooldownUntil;   // anger: the cat hisses, then runs away and can't be touched for a bit
     Native.POINT cursor;
 
@@ -146,23 +147,27 @@ sealed class PetWindow : Form
     int Unit => Math.Max(1, (int)Math.Round(4 * S));   // art pixel size: same as the cat's
 
     // Bowl / bed: spawn on the taskbar next to the cat, or remove if already there
-    public void ToggleProp(bool isBed)
+    public void ToggleProp(bool isBed, int? left = null)
     {
         var existing = isBed ? bed : bowl;
         if (existing != null) { existing.Close(); return; }
         var p = new TaskbarProp(isBed, Unit);
         var scr = Screen.FromPoint(new Point((int)(x + size / 2.0), (int)(y + size / 2.0)));
-        p.PlaceNear((int)(x + size / 2.0 + (isBed ? -1.4 : 1.2) * size), scr);
+        if (left is int l) p.PlaceNear(l + p.Width / 2, Screen.FromPoint(new Point(l + p.Width / 2, Screen.PrimaryScreen!.Bounds.Bottom - 5)));   // restored position
+        else p.PlaceNear((int)(x + size / 2.0 + (isBed ? -1.4 : 1.2) * size), scr);
         p.FormClosed += (_, _) =>
         {
             if (isBed) { if (bed == p) bed = null; } else if (bowl == p) bowl = null;
             if (goal == (isBed ? Goal.Bed : Goal.Bowl)) { Target = null; state = "idle"; }
+            if (!shuttingDown) SaveObjects();
         };
         if (isBed) bed = p; else bowl = p;
         p.Show();
+        p.Placed += SaveObjects;
+        SaveObjects();
     }
 
-    public void ToggleBall()
+    public void ToggleBall(int? px = null, int? py = null)
     {
         if (ball != null) { ball.Close(); return; }
         var b = new BallWindow(Unit, S);
@@ -172,10 +177,38 @@ sealed class PetWindow : Form
             if (ball == b) ball = null;
             if (goal == Goal.Ball) { Target = null; state = "idle"; }
             chaseUntil = 0;
+            if (!shuttingDown) SaveObjects();
         };
         ball = b;
-        b.Drop((int)(x + size / 2.0), (int)y);   // falls from the cat
+        if (px is int bx && py is int by) b.Restore(bx, by);   // where it was last time
+        else b.Drop((int)(x + size / 2.0), (int)y);              // falls from the cat
         b.Show();
+        b.Placed += SaveObjects;
+        SaveObjects();
+    }
+
+    // The summoned objects (and where they are) are remembered between runs; the ball keeps the place where it
+    // last came to rest, even if the cat moved it.
+    public void SaveObjects()
+    {
+        Cfg.Bowl = bowl == null ? "" : bowl.Left.ToString();
+        Cfg.Bed = bed == null ? "" : bed.Left.ToString();
+        Cfg.Ball = ball == null ? "" : $"{ball.Left},{ball.Top}";
+        Cfg.Save();
+    }
+
+    public void PrepareExit() { shuttingDown = true; SaveObjects(); }
+
+    public void RestoreObjects()
+    {
+        // read everything first: spawning an object saves the state, which would erase the ones not restored yet
+        bool hasBowl = int.TryParse(Cfg.Bowl, out int bx), hasBed = int.TryParse(Cfg.Bed, out int dx);
+        var xy = Cfg.Ball.Split(',');
+        bool hasBall = xy.Length == 2 && int.TryParse(xy[0], out int px0) && int.TryParse(xy[1], out int py0);
+        int px = hasBall ? int.Parse(xy[0]) : 0, py = hasBall ? int.Parse(xy[1]) : 0;
+        if (hasBowl) ToggleProp(false, bx);
+        if (hasBed) ToggleProp(true, dx);
+        if (hasBall) ToggleBall(px, py);
     }
 
     (double, double)? GoalTarget(Goal gl)
@@ -220,6 +253,8 @@ sealed class PetWindow : Form
     void Anger()
     {
         long now = Now;
+        happiness = Math.Max(0, happiness - 20);   // being angered makes it unhappy...
+        energy = Math.Max(0, energy - 5);          // ...and wears it out
         SetState("frenzy", 2500);
         fleeAt = now + 2500;
         noInteractUntil = now + 2500 + 2000;
@@ -252,6 +287,8 @@ sealed class PetWindow : Form
         double vx = Math.Cos(ang) * sp, vy = Math.Sin(ang) * sp - 500 * S;
         ball.Kick(vx, vy);
         lastKickAt = Now;
+        energy = Math.Max(0, energy - 2);   // every kick of the ball costs a bit of energy
+        hunger = Math.Max(0, hunger - 0.5);
         kickSound = true;   // happiness grows gradually while playing (see Logic)
         Target = null;
         facingRight = vx > 0;
@@ -403,6 +440,9 @@ sealed class PetWindow : Form
             Target = Clamp(p.X - size / 2.0, p.Y - size / 2.0);
             frame = 0;
             SetState("pounce", (int)Cfg.Cycle + 100);
+            energy = Math.Max(0, energy - 3);        // chasing the mouse is tiring, but fun
+            hunger = Math.Max(0, hunger - 1);
+            happiness = Math.Min(100, happiness + 4);
             nextJumpAt = now + (long)(Cfg.JumpCooldown * 1000);
             fastSince = 0;
         }
@@ -411,8 +451,10 @@ sealed class PetWindow : Form
     void OnClickPet()
     {
         if (Now < noInteractUntil) return;   // angry / running away: ignores the mouse
-        hunger = Math.Min(100, hunger + 10);
-        happiness = Math.Min(100, happiness + 15);
+        // every click tires the cat out, whether it plays or not (a little hungrier, a little happier)
+        energy = Math.Max(0, energy - 4);
+        hunger = Math.Max(0, hunger - 1.5);
+        happiness = Math.Min(100, happiness + 6);
         long now = Now;
         while (clicks.Count > 0 && now - clicks.Peek() >= 2000) clicks.Dequeue();
         clicks.Enqueue(now);
@@ -489,6 +531,11 @@ sealed class PetWindow : Form
         hunger = Math.Max(0, hunger - 100.0 / HungerSeconds);
         happiness = Math.Max(0, happiness - 100.0 / HappinessSeconds);
         energy = Math.Max(0, energy - 100.0 / EnergySeconds);
+
+        // Moving around costs extra, per second: running (also chasing, fleeing, jumping) tires it and makes it hungry faster
+        (double e, double h) cost = state switch { "run" => (0.45, 0.3), "pounce" => (0.6, 0.35), "walk" => (0.12, 0.08), _ => (0, 0) };
+        energy = Math.Max(0, energy - cost.e);
+        hunger = Math.Max(0, hunger - cost.h);
 
         // Needs are restored gradually, per second: sleeping -> energy, eating -> hunger, playing with the ball -> happiness
         if (ball != null && (goal == Goal.Ball || Now - lastKickAt < 2500)) happiness = Math.Min(100, happiness + 2.5);

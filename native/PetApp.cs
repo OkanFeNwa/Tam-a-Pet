@@ -19,7 +19,8 @@ sealed class PetApp : IDisposable
         tray.Text = "Desktop Pet";
 
         settingsItem.Click += (_, _) => OpenSettings();
-        exitItem.Click += (_, _) => { tray.Visible = false; Application.Exit(); };
+        exitItem.Click += (_, _) => { pet.PrepareExit(); tray.Visible = false; Application.Exit(); };
+        Microsoft.Win32.SystemEvents.SessionEnding += (_, _) => pet.PrepareExit();   // Windows is shutting down / signing out
         bowlItem.Click += (_, _) => pet.ToggleProp(false);
         bedItem.Click += (_, _) => pet.ToggleProp(true);
         ballItem.Click += (_, _) => pet.ToggleBall();
@@ -40,6 +41,7 @@ sealed class PetApp : IDisposable
 
         Cfg.OnTopChanged += () => pet.ApplyOnTop(Cfg.OnTop);
         pet.Show();
+        pet.RestoreObjects();   // bowl, bed and ball come back where they were
         foreach (var what in spawn.Split(',', StringSplitOptions.RemoveEmptyEntries)) pet.Trigger(what);   // --spawn bowl,bed,ball (testing)
         trimT.Tick += (_, _) => Native.Trim();
         trimT.Start();
