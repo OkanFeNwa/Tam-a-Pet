@@ -21,36 +21,38 @@ sealed class SettingsForm : Form
         ("cycle", "movement", 600, 3000, 50, v => v.ToString("0")),
     };
 
+    // sound credits: translation key of what it is used for, and who made it (the cat meows need none)
+    static readonly (string key, string who)[] Credits =
+    {
+        ("credits.purr", "Kerzoven · CC0 · OpenGameArt.org"),
+        ("credits.kitten", "Technopeasant (Baby Animals - Sounds Pack) · CC0 · OpenGameArt.org"),
+        ("credits.munch", "StarNinjas (7 Eating Crunches) · CC0 · OpenGameArt.org"),
+    };
+
+    static readonly (string key, string group, double min, double max, double step, Func<double, string> fmt) VolumeField =
+        ("volume", "audio", 0, 100, 5, v => v.ToString("0"));
+
     readonly float k;
     readonly Color bg, sideBg, card, text, muted, line, accent, accentSoft, track;
     readonly Font fBase, fBold, fTitle, fSmall, fBrand;
     readonly Icon appIcon;
-    readonly Panel side = new() { Dock = DockStyle.Left };
-    readonly Panel host = new() { Dock = DockStyle.Fill };
-    readonly Panel view = new();                 // scrolled content (moved up/down by the custom scrollbar)
+    readonly Panel side = new BufferedPanel { Dock = DockStyle.Left };
+    readonly Panel host = new BufferedPanel { Dock = DockStyle.Fill };
+    readonly Panel view = new BufferedPanel();                 // scrolled content (moved up/down by the custom scrollbar)
     readonly Bar bar;
     int devClicks;
+    bool focusName = true;
     System.Windows.Forms.Timer? statsT;
-    string page = Environment.GetCommandLineArgs().Contains("--cat") ? "cat" : "general";
+    string page = Environment.GetCommandLineArgs().Contains("--cat") ? "cat" : Environment.GetCommandLineArgs().Contains("--credits") ? "credits" : "general";
 
     [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
 
-    public SettingsForm()
+    public SettingsForm(string startPage = "")
     {
+        if (startPage != "") page = startPage;
         using (var gr = CreateGraphics()) k = gr.DpiX / 96f;
-        bool dark = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1) is 0;
-        if (dark)
-        {
-            bg = Color.FromArgb(0x14, 0x15, 0x1b); sideBg = Color.FromArgb(0x1a, 0x1b, 0x23); card = Color.FromArgb(0x1f, 0x20, 0x29);
-            text = Color.FromArgb(0xee, 0xf0, 0xf6); muted = Color.FromArgb(0x8d, 0x92, 0xa6); line = Color.FromArgb(0x2a, 0x2c, 0x38);
-            accent = Color.FromArgb(0x8b, 0x7c, 0xff); accentSoft = Color.FromArgb(0x2b, 0x28, 0x50); track = Color.FromArgb(0x2f, 0x31, 0x42);
-        }
-        else
-        {
-            bg = Color.FromArgb(0xf3, 0xf4, 0xf9); sideBg = Color.White; card = Color.White;
-            text = Color.FromArgb(0x1b, 0x1d, 0x2a); muted = Color.FromArgb(0x7b, 0x80, 0x96); line = Color.FromArgb(0xe6, 0xe8, 0xf1);
-            accent = Color.FromArgb(0x6c, 0x5c, 0xe7); accentSoft = Color.FromArgb(0xed, 0xea, 0xff); track = Color.FromArgb(0xe0, 0xe3, 0xef);
-        }
+        bg = Theme.Bg; sideBg = Theme.SideBg; card = Theme.Card; text = Theme.Text; muted = Theme.Muted;
+        line = Theme.Line; accent = Theme.Accent; accentSoft = Theme.AccentSoft; track = Theme.Track;
         fBase = new Font("Segoe UI", 9.5f); fBold = new Font("Segoe UI Semibold", 9.5f); fTitle = new Font("Segoe UI Semibold", 18f);
         fSmall = new Font("Segoe UI", 8.5f); fBrand = new Font("Segoe UI Semibold", 11f);
         using (var s = typeof(SettingsForm).Assembly.GetManifestResourceStream("icon.ico")!) appIcon = new Icon(s);
@@ -82,6 +84,13 @@ sealed class SettingsForm : Form
         Cfg.LanguageChanged += Rebuild;
     }
 
+    public void GoTo(string p)
+    {
+        if (p == "") return;
+        page = p; bar.Value = 0;
+        if (IsHandleCreated) Build();
+    }
+
     // built once the real layout exists (host.ClientSize is only meaningful now)
     protected override void OnShown(EventArgs e) { base.OnShown(e); Build(); }
 
@@ -110,7 +119,26 @@ sealed class SettingsForm : Form
 
     // ---- layout ---------------------------------------------------------------------------------
 
+    [DllImport("user32.dll")] static extern int SendMessage(IntPtr hwnd, int msg, int wparam, int lparam);
+
+    // Rebuilding destroys and recreates every control: stop painting meanwhile, so the window doesn't flicker
     void Build()
+    {
+        const int WM_SETREDRAW = 0x000B;
+        bool live = IsHandleCreated && view.IsHandleCreated && side.IsHandleCreated;
+        if (live) { SendMessage(view.Handle, WM_SETREDRAW, 0, 0); SendMessage(side.Handle, WM_SETREDRAW, 0, 0); }
+        try { BuildCore(); }
+        finally
+        {
+            if (live)
+            {
+                SendMessage(view.Handle, WM_SETREDRAW, 1, 0); SendMessage(side.Handle, WM_SETREDRAW, 1, 0);
+                view.Invalidate(true); side.Invalidate(true);
+            }
+        }
+    }
+
+    void BuildCore()
     {
         Text = Str.T("title");
         foreach (Control c in side.Controls.Cast<Control>().ToList()) c.Dispose();
@@ -135,6 +163,8 @@ sealed class SettingsForm : Form
         if (page == "general")
         {
             y = Title(Str.T("nav.general"), pad, y, w);
+
+            // language
             var c = AddCard(pad, y, w);
             int cy = RowHeader(c, Str.T("language"), Str.T("language.hint"), P(16), P(12), w - P(32));
             int bx = P(16);
@@ -146,7 +176,18 @@ sealed class SettingsForm : Form
                 bx += P(118);
             }
             c.Height = cy + P(52);
-            y += c.Height + P(18);
+            y += c.Height + P(14);
+
+            // preferences: always on top, start with Windows, volume
+            var pc = AddCard(pad, y, w);
+            int py = P(4);
+            py = ToggleRow(pc, "onTop", py + P(12), w - P(32), Cfg.OnTop, v => Cfg.SetOnTop(v));
+            pc.Controls.Add(new Panel { Bounds = new Rectangle(P(16), py, w - P(32), 1), BackColor = line });
+            py = ToggleRow(pc, "startup", py + P(12), w - P(32), Startup.Enabled, v => { try { Startup.Set(v); } catch { } });
+            pc.Controls.Add(new Panel { Bounds = new Rectangle(P(16), py, w - P(32), 1), BackColor = line });
+            py = SliderRow(pc, VolumeField, py + P(12), w - P(32));
+            pc.Height = py + P(4);
+            y += pc.Height + P(18);
 
             view.Controls.Add(Lbl(Str.T("about"), fBold, muted, pad + P(2), y, w));
             y += P(28);
@@ -157,7 +198,10 @@ sealed class SettingsForm : Form
             val.BackColor = card; about.Controls.Add(val);
             var note = Lbl("", fSmall, muted, P(16), P(40), w - P(32)); note.BackColor = card; about.Controls.Add(note);
             if (Cfg.Dev) note.Text = Str.T("dev.active");
-            about.Height = P(70);
+            var creditsBtn = new Pill(this) { Text = Str.T("about.creditsBtn"), Kind = PillKind.Seg, Bounds = new Rectangle(P(16), P(68), P(130), P(32)) };
+            creditsBtn.Click += (_, _) => { page = "credits"; bar.Value = 0; Build(); };
+            about.Controls.Add(creditsBtn);
+            about.Height = P(68) + P(32) + P(16);
             // Tap the version 9 times (like a cat's lives) to unlock developer mode
             val.Click += (_, _) =>
             {
@@ -167,6 +211,26 @@ sealed class SettingsForm : Form
                 else if (devClicks >= 4) note.Text = string.Format(Str.T("dev.left"), 9 - devClicks);
             };
         }
+        else if (page == "credits")
+        {
+            y = Title(Str.T("credits.title"), pad, y, w);
+            view.Controls.Add(Lbl(Str.T("credits.sounds"), fBold, muted, pad + P(2), y - P(6), w));
+            y += P(22);
+            var cc = AddCard(pad, y, w);
+            int cy2 = P(4);
+            bool first = true;
+            foreach (var (key, who) in Credits)
+            {
+                if (!first) cc.Controls.Add(new Panel { Bounds = new Rectangle(P(16), cy2, w - P(32), 1), BackColor = line });
+                first = false;
+                cy2 = RowHeader(cc, Str.T(key), who, P(16), cy2 + P(12), w - P(32)) + P(8);
+            }
+            cc.Height = cy2 + P(4);
+            y += cc.Height + P(14);
+            var back = new Pill(this) { Text = Str.T("credits.back"), Bounds = new Rectangle(pad, y + P(6), P(150), P(34)), Kind = PillKind.Outline };
+            back.Click += (_, _) => { page = "general"; bar.Value = 0; Build(); };
+            view.Controls.Add(back);
+        }
         else if (page == "dev")
         {
             y = Title(Str.T("nav.dev"), pad, y, w);
@@ -175,13 +239,13 @@ sealed class SettingsForm : Form
             view.Controls.Add(Lbl(Str.T("dev.actions"), fBold, muted, pad + P(2), y, w));
             y += P(28);
             var c = AddCard(pad, y, w);
-            string[] acts = { "idle", "lick", "walk", "run", "sleep", "play", "pounce", "frenzy" };
+            string[] acts = { "idle", "lick", "walk", "run", "sleep", "play", "pounce", "frenzy", "meow", "bowl", "bed", "ball", "hungry", "sad", "tired" };
             int gap = P(8), cols = 3, bw = (w - P(32) - gap * (cols - 1)) / cols, bh = P(38);
             for (int i = 0; i < acts.Length; i++)
             {
-                string a = acts[i];
-                var b = new Pill(this) { Text = Str.T("act." + a), Kind = PillKind.Seg, Bounds = new Rectangle(P(16) + i % cols * (bw + gap), P(16) + i / cols * (bh + gap), bw, bh) };
-                b.Click += (_, _) => PetWindow.Instance?.Trigger(a);
+                string a2 = acts[i];
+                var b = new Pill(this) { Text = Str.T("act." + a2), Kind = PillKind.Seg, Bounds = new Rectangle(P(16) + i % cols * (bw + gap), P(16) + i / cols * (bh + gap), bw, bh) };
+                b.Click += (_, _) => PetWindow.Instance?.Trigger(a2);
                 c.Controls.Add(b);
             }
             c.Height = P(16) * 2 + (acts.Length + cols - 1) / cols * (bh + gap) - gap;
@@ -204,35 +268,45 @@ sealed class SettingsForm : Form
             statsT = new System.Windows.Forms.Timer { Interval = 500 };
             statsT.Tick += (_, _) => Refresh();
             statsT.Start();
-            y += sc.Height;
-            var off = new Pill(this) { Text = Str.T("dev.disable"), Bounds = new Rectangle(pad, y + P(18), P(240), P(34)), Kind = PillKind.Outline };
+            y += sc.Height + P(14);
+
+            // behaviour tuning (kept here for development, not part of the normal settings)
+            foreach (var group in new[] { "mouse", "movement" })
+            {
+                view.Controls.Add(Lbl(Str.T("group." + group), fBold, muted, pad + P(2), y, w));
+                y += P(28);
+                var tc = AddCard(pad, y, w);
+                int ty = P(4);
+                bool firstRow = true;
+                foreach (var f in Fields.Where(f => f.group == group))
+                {
+                    if (!firstRow) { tc.Controls.Add(new Panel { Bounds = new Rectangle(P(16), ty, w - P(32), 1), BackColor = line }); }
+                    firstRow = false;
+                    ty = SliderRow(tc, f, ty + P(12), w - P(32));
+                }
+                tc.Height = ty + P(4);
+                y += tc.Height + P(14);
+            }
+            var reset = new Pill(this) { Text = Str.T("reset"), Bounds = new Rectangle(pad, y + P(6), P(190), P(34)), Kind = PillKind.Outline };
+            reset.Click += (_, _) => { Cfg.ResetCat(); Build(); };
+            view.Controls.Add(reset);
+            var off = new Pill(this) { Text = Str.T("dev.disable"), Bounds = new Rectangle(pad + P(202), y + P(6), P(240), P(34)), Kind = PillKind.Outline };
             off.Click += (_, _) => { Cfg.Dev = false; Cfg.Save(); page = "general"; Build(); };
             view.Controls.Add(off);
         }
         else
         {
+            // the cat: its name
             y = Title(Str.T("nav.cat"), pad, y, w);
-            view.Controls.Add(Lbl(Str.T("cat.intro"), fBase, muted, pad, y - P(6), w));
-            y += P(26);
-            foreach (var group in new[] { "mouse", "movement" })
-            {
-                view.Controls.Add(Lbl(Str.T("group." + group), fBold, muted, pad + P(2), y, w));
-                y += P(28);
-                var c = AddCard(pad, y, w);
-                int cy = P(4);
-                bool firstRow = true;
-                foreach (var f in Fields.Where(f => f.group == group))
-                {
-                    if (!firstRow) { c.Controls.Add(new Panel { Bounds = new Rectangle(P(16), cy, w - P(32), 1), BackColor = line }); }
-                    firstRow = false;
-                    cy = SliderRow(c, f, cy + P(12), w - P(32));
-                }
-                c.Height = cy + P(4);
-                y += c.Height + P(14);
-            }
-            var reset = new Pill(this) { Text = Str.T("reset"), Bounds = new Rectangle(pad, y + P(6), P(190), P(34)), Kind = PillKind.Outline };
-            reset.Click += (_, _) => { Cfg.ResetCat(); Build(); };
-            view.Controls.Add(reset);
+            var nc = AddCard(pad, y, w);
+            int ny2 = RowHeader(nc, Str.T("name.label"), Str.T("name.hint"), P(16), P(12), w - P(32));
+            var field = new Card(track, line, card, P(8)) { Bounds = new Rectangle(P(16), ny2 + P(4), w - P(32), P(34)) };
+            var tb = new TextBox { Text = Cfg.Name, MaxLength = 20, BorderStyle = BorderStyle.None, BackColor = track, ForeColor = text, Font = fBase, Bounds = new Rectangle(P(10), P(8), w - P(32) - P(20), P(20)) };
+            tb.TextChanged += (_, _) => { Cfg.Name = tb.Text.Trim(); Cfg.Save(); };
+            field.Controls.Add(tb);
+            nc.Controls.Add(field);
+            nc.Height = ny2 + P(4) + P(34) + P(16);
+            if (focusName) { ActiveControl = tb; focusName = false; }
         }
 
         int bottom = view.Controls.Cast<Control>().Max(c => c.Bottom) + pad;
@@ -278,10 +352,25 @@ sealed class SettingsForm : Form
         void Show() => val.Text = $"{f.fmt(Cfg.V[f.key])} {unit}";
         var s = new Slider(k) { Min = f.min, Max = f.max, Step = f.step, Value = Cfg.V[f.key], Track = track, Accent = accent, Back = card, Bounds = new Rectangle(P(16), cy, w, P(26)) };
         s.Changed += () => { Cfg.V[f.key] = s.Value; Show(); };
-        s.Committed += Cfg.Save;
+        s.Committed += () => { Cfg.Save(); if (f.key == "volume") { Audio.Refresh(); Audio.Play("mew"); } };   // volume: let the user hear it
         Show();
         parent.Controls.Add(s);
         return cy + P(26) + P(10);
+    }
+
+    // label + hint on the left, an on/off switch on the right
+    int ToggleRow(Control parent, string key, int y, int w, bool value, Action<bool> set)
+    {
+        int cy = RowHeader(parent, Str.T(key + ".label"), Str.T(key + ".hint"), P(16), y, w - P(70));
+        var t = new Toggle(this) { On = value, Bounds = new Rectangle(P(16) + w - P(44), y + P(2), P(44), P(24)) };
+        t.Changed += () => set(t.On);
+        parent.Controls.Add(t);
+        return Math.Max(cy, y + P(30)) + P(10);
+    }
+
+    sealed class BufferedPanel : Panel
+    {
+        public BufferedPanel() { DoubleBuffered = true; }
     }
 
     // ---- custom controls ------------------------------------------------------------------------
@@ -392,6 +481,29 @@ sealed class SettingsForm : Form
             int r = (int)(9 * k), ri = (int)(4 * k);
             using (var b = new SolidBrush(Accent)) g.FillEllipse(b, tx - r, cy - r, r * 2, r * 2);
             using (var b = new SolidBrush(Color.White)) g.FillEllipse(b, tx - ri, cy - ri, ri * 2, ri * 2);
+        }
+    }
+
+    sealed class Toggle : Control
+    {
+        readonly SettingsForm f;
+        public bool On;
+        public event Action? Changed;
+        public Toggle(SettingsForm owner)
+        {
+            f = owner;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            SetStyle(ControlStyles.Selectable, false);
+            Cursor = Cursors.Hand;
+        }
+        protected override void OnClick(EventArgs e) { On = !On; Invalidate(); Changed?.Invoke(); base.OnClick(e); }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; g.Clear(f.card);
+            using (var path = RoundRect(new Rectangle(0, 0, Width - 1, Height - 1), Height / 2))
+            using (var b = new SolidBrush(On ? f.accent : f.track)) g.FillPath(b, path);
+            int d = Height - f.P(8), x = On ? Width - d - f.P(4) : f.P(4);
+            using (var b = new SolidBrush(Color.White)) g.FillEllipse(b, x, f.P(4), d, d);
         }
     }
 

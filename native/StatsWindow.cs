@@ -20,26 +20,29 @@ sealed class StatsWindow : Form
     static readonly string[] Keys = { "stat.hunger", "stat.happiness", "stat.energy" };
 
     readonly float S;
-    readonly Size panel;
+    Size panel;
     readonly System.Windows.Forms.Timer fadeT = new() { Interval = 16 };
     Bitmap? cur;                      // what the window currently shows (re-pushed with a new alpha while fading)
     int alpha, target;                // 0..255
     long lastKey = -1;
-    string lastLang = "";
+    string lastLang = "", lastName = "";
     Point lastLoc = new(int.MinValue, 0);
 
     const int FadeMs = 200;
 
     int Px(double v) => (int)Math.Round(v * S);
 
+    // taller when the cat has a name (shown as a title)
+    Size PanelSize => new(Px(200), Px(128 + (Cfg.Name.Length > 0 ? 28 : 0)));
+
     public StatsWindow(float scale)
     {
         S = scale;
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
-        TopMost = true;
+        TopMost = Cfg.OnTop;
         StartPosition = FormStartPosition.Manual;
-        panel = new Size(Px(200), Px(128));
+        panel = PanelSize;
         ClientSize = panel;
         fadeT.Tick += (_, _) => FadeStep();
     }
@@ -72,17 +75,21 @@ sealed class StatsWindow : Form
 
         int h = (int)Math.Round(hunger), hp = (int)Math.Round(happiness), e = (int)Math.Round(energy);
         long key = h | (long)hp << 8 | (long)e << 16;
-        bool changed = key != lastKey || loc != lastLoc || lastLang != Cfg.Lang;
+        if (panel != PanelSize) { panel = PanelSize; ClientSize = panel; lastKey = -1; }
+        y = Math.Max(wa.Top, cat.Top + cat.Height / 2 - panel.Height - Px(6));
+        loc = new Point(x, y);
+        bool changed = key != lastKey || loc != lastLoc || lastLang != Cfg.Lang || lastName != Cfg.Name;
         if (!Visible) { alpha = 0; Show(); changed = true; }
         target = 255;
         if (changed)
         {
-            lastKey = key; lastLoc = loc; lastLang = Cfg.Lang;
+            lastKey = key; lastLoc = loc; lastLang = Cfg.Lang; lastName = Cfg.Name;
             Location = loc;
             cur?.Dispose();
             cur = Render(h, hp, e);
             Push();
-            Native.SetWindowPos(Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);   // stay above the cat
+            TopMost = Cfg.OnTop;
+            if (TopMost) Native.SetWindowPos(Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);   // stay above the cat
         }
         if (alpha != target && !fadeT.Enabled) fadeT.Start();
     }
@@ -129,11 +136,20 @@ sealed class StatsWindow : Form
         }
 
         int pad = Px(14), w = panel.Width - pad * 2, barH = Px(7), y = pad;
+        if (Cfg.Name.Length > 0)
+        {
+            using var title = new Font("Segoe UI Semibold", 14f * S, FontStyle.Regular, GraphicsUnit.Pixel);
+            using var titleBrush = new SolidBrush(Color.White);
+            g.DrawString(Cfg.Name, title, titleBrush, new RectangleF(pad - 1, y - Px(1), w + 2, Px(24)), new StringFormat { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap });
+            y += Px(28);
+        }
         using var font = new Font("Segoe UI Semibold", 11.5f * S, FontStyle.Regular, GraphicsUnit.Pixel);
         using var labelBrush = new SolidBrush(LabelCol);
+        using var right = new StringFormat { Alignment = StringAlignment.Far };
         for (int i = 0; i < 3; i++)
         {
             g.DrawString(Str.T(Keys[i]), font, labelBrush, pad - 1, y - Px(1));
+            g.DrawString(values[i].ToString(), font, labelBrush, new RectangleF(pad, y - Px(1), w + 1, Px(20)), right);   // value, right-aligned on the same row
             DrawBar(g, new Rectangle(pad, y + Px(21), w, barH), values[i] / 100.0, Colors[i]);
             y += Px(36);
         }

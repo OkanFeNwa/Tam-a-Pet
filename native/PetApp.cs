@@ -7,49 +7,66 @@ sealed class PetApp : IDisposable
     readonly PetWindow pet = new();
     readonly NotifyIcon tray = new();
     readonly ContextMenuStrip menu = new();
-    readonly ToolStripMenuItem onTop = new() { CheckOnClick = true, Checked = true };
-    readonly ToolStripMenuItem settingsItem = new(), showItem = new(), hideItem = new(), exitItem = new();
+    readonly ToolStripMenuItem settingsItem = new(), exitItem = new(), objectsItem = new();
+    readonly ToolStripMenuItem bowlItem = new(), bedItem = new(), ballItem = new();
     readonly System.Windows.Forms.Timer trimT = new() { Interval = 60_000 };
     SettingsForm? settings;
 
-    public PetApp(bool openSettings = false)
+    public PetApp(bool openSettings = false, string spawn = "")
     {
         using var s = typeof(PetApp).Assembly.GetManifestResourceStream("icon.ico")!;
         tray.Icon = new Icon(s);
         tray.Text = "Desktop Pet";
 
-        onTop.CheckedChanged += (_, _) => pet.TopMost = onTop.Checked;
         settingsItem.Click += (_, _) => OpenSettings();
-        showItem.Click += (_, _) => pet.Show();
-        hideItem.Click += (_, _) => pet.Hide();
         exitItem.Click += (_, _) => { tray.Visible = false; Application.Exit(); };
-        menu.Items.AddRange(new ToolStripItem[] { onTop, settingsItem, new ToolStripSeparator(), showItem, hideItem, new ToolStripSeparator(), exitItem });
+        bowlItem.Click += (_, _) => pet.ToggleProp(false);
+        bedItem.Click += (_, _) => pet.ToggleProp(true);
+        ballItem.Click += (_, _) => pet.ToggleBall();
+        objectsItem.DropDownItems.AddRange(new ToolStripItem[] { bowlItem, bedItem, ballItem });
+        objectsItem.DropDownOpening += (_, _) => { bowlItem.Checked = pet.HasBowl; bedItem.Checked = pet.HasBed; ballItem.Checked = pet.HasBall; };
+        menu.Items.AddRange(new ToolStripItem[] { objectsItem, settingsItem, new ToolStripSeparator(), exitItem });
+        MenuRenderer.Apply(menu);
         tray.ContextMenuStrip = menu;
-        tray.DoubleClick += (_, _) => OpenSettings();
+        // left click opens the same menu (right click already does)
+        tray.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+                typeof(NotifyIcon).GetMethod("ShowContextMenu", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.Invoke(tray, null);
+        };
         Cfg.LanguageChanged += Translate;
         Translate();
         tray.Visible = true;
 
+        Cfg.OnTopChanged += () => pet.ApplyOnTop(Cfg.OnTop);
         pet.Show();
+        foreach (var what in spawn.Split(',', StringSplitOptions.RemoveEmptyEntries)) pet.Trigger(what);   // --spawn bowl,bed,ball (testing)
         trimT.Tick += (_, _) => Native.Trim();
         trimT.Start();
         if (openSettings) OpenSettings();
+        if (Environment.GetCommandLineArgs().Contains("--show-menu"))   // testing: show the tray menu without clicking the icon
+        {
+            var once = new System.Windows.Forms.Timer { Interval = 1500 };
+            once.Tick += (_, _) => { once.Stop(); menu.Show(new Point(600, 300)); objectsItem.ShowDropDown(); };
+            once.Start();
+        }
         Native.Trim();
     }
 
     void Translate()
     {
-        onTop.Text = Str.T("tray.alwaysOnTop");
+        objectsItem.Text = Str.T("menu.objects");
+        bowlItem.Text = Str.T("menu.bowl");
+        bedItem.Text = Str.T("menu.bed");
+        ballItem.Text = Str.T("menu.ball");
         settingsItem.Text = Str.T("tray.settings");
-        showItem.Text = Str.T("tray.show");
-        hideItem.Text = Str.T("tray.hide");
         exitItem.Text = Str.T("tray.exit");
     }
 
-    void OpenSettings()
+    void OpenSettings(string page = "")
     {
-        if (settings != null) { settings.Activate(); return; }
-        settings = new SettingsForm();
+        if (settings != null) { settings.GoTo(page); settings.Activate(); return; }
+        settings = new SettingsForm(page);
         settings.FormClosed += (_, _) => { settings.Dispose(); settings = null; Native.Trim(); };
         settings.Show();
     }
