@@ -12,7 +12,7 @@ Tamagotchi-style virtual pets that live on your Windows desktop. It starts with 
   <img src="docs/img/custom.jpg" alt="Customising a pet and its objects" width="32%">
 </p>
 
-> **Status: 0.0.1 (pre-release).** Work in progress: more features and bug fixes are coming before the first real release.
+> **Status: 0.0.2 (pre-release).** Work in progress: more features and bug fixes are coming before the first real release.
 
 ## Download
 
@@ -53,7 +53,7 @@ cd native
 dotnet build -c Release          # to try it: native\bin\Release\net8.0-windows\TamAPet.exe
 ```
 
-To make a release: raise `<Version>` in `native/TamAPet.csproj`, then create and push the tag (`git tag v0.0.1 && git push origin v0.0.1`): the `.github/workflows/release.yml` workflow builds and publishes the release with installer, portable version and checksums.
+To make a release: raise `<Version>` in `native/TamAPet.csproj`, then create and push the tag (`git tag v0.0.2 && git push origin v0.0.2`): the `.github/workflows/release.yml` workflow builds and publishes the release with installer, portable version and checksums.
 
 The installer is the app itself: an executable named `TamAPet-Setup*.exe` shows the install wizard (see `native/Installer.cs`); the installed app removes itself with `--uninstall`.
 

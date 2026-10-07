@@ -155,7 +155,7 @@ static class Installer
             foreach (var (box, key, y) in new[] { (desktop, "desktop", 208), (startup, "startup", 236) })
             {
                 box.Text = T(key); box.BackColor = Theme.Bg; box.ForeColor = Theme.Text; box.Cursor = Cursors.Hand;
-                box.Bounds = new Rectangle(P(30), P(y), P(440), P(24)); box.FlatStyle = FlatStyle.System;
+                box.Bounds = new Rectangle(P(30), P(y), P(440), P(24)); box.FlatStyle = FlatStyle.Standard; box.UseVisualStyleBackColor = false;   // System style ignores ForeColor: black text on the dark background
                 Controls.Add(box);
             }
             desktop.Checked = true;
