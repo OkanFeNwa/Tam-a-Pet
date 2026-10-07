@@ -16,9 +16,16 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Build the installer and the portable exe
+      - name: Build the portable exe, the installer (the same exe under another name) and the checksums
         shell: pwsh
-        run: ./native/publish.ps1
+        run: |
+          $dist = "native/dist"
+          dotnet publish native/TamAPet.csproj -c Release -r win-x64 --self-contained true -o "$dist/build"
+          if ($LASTEXITCODE -ne 0) { throw "publish failed" }
+          Move-Item "$dist/build/TamAPet.exe" "$dist/TamAPet-Portable.exe"
+          Copy-Item "$dist/TamAPet-Portable.exe" "$dist/TamAPet-Setup.exe"
+          Remove-Item "$dist/build" -Recurse -Force
+          Get-ChildItem "$dist/*.exe" | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } | Set-Content "$dist/SHA256SUMS.txt"
       - name: Attach the files to the release (created here if it does not exist yet)
         shell: pwsh
         env:

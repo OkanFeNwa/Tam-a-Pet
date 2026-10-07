@@ -51,10 +51,9 @@ You need the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 ```powershell
 cd native
 dotnet build -c Release          # to try it: native\bin\Release\net8.0-windows\TamAPet.exe
-.\publish.ps1                    # the two executables to distribute, in native\dist
 ```
 
-To make a release: raise `<Version>` in `native/TamAPet.csproj`, update `CHANGELOG.md`, then create and push the tag (`git tag v0.0.1 && git push origin v0.0.1`): the `.github/workflows/release.yml` workflow builds and publishes the release with installer, portable version and checksums.
+To make a release: raise `<Version>` in `native/TamAPet.csproj`, then create and push the tag (`git tag v0.0.1 && git push origin v0.0.1`): the `.github/workflows/release.yml` workflow builds and publishes the release with installer, portable version and checksums.
 
 The installer is the app itself: an executable named `TamAPet-Setup*.exe` shows the install wizard (see `native/Installer.cs`); the installed app removes itself with `--uninstall`.
 
