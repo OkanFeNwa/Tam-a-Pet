@@ -32,6 +32,8 @@ sealed class PetWindow : Form
 
     readonly Bitmap sheet;
     readonly Bitmap buf;
+    readonly LayeredSurface surface;
+    readonly Font?[] zFonts = new Font?[8];   // the floating z letters of the sleep animation
     readonly Graphics g;
     readonly ImageAttributes attrs = new();
     readonly int size;                          // on-screen sprite size (integer multiple of 32)
@@ -80,7 +82,8 @@ sealed class PetWindow : Form
             sg.CompositingMode = CompositingMode.SourceCopy;
             sg.DrawImage(png, 0, 0, png.Width, png.Height);
         }
-        buf = new Bitmap(size, size, PixelFormat.Format32bppPArgb);
+        surface = new LayeredSurface(size, size);
+        buf = surface.Bitmap;
         g = Graphics.FromImage(buf);
         g.InterpolationMode = InterpolationMode.NearestNeighbor;
         g.PixelOffsetMode = PixelOffsetMode.Half;
@@ -152,8 +155,8 @@ sealed class PetWindow : Form
         var existing = isBed ? bed : bowl;
         if (existing != null) { existing.Close(); return; }
         var p = new TaskbarProp(isBed, Unit);
-        var scr = Screen.FromPoint(new Point((int)(x + size / 2.0), (int)(y + size / 2.0)));
-        if (left is int l) p.PlaceNear(l + p.Width / 2, Screen.FromPoint(new Point(l + p.Width / 2, Screen.PrimaryScreen!.Bounds.Bottom - 5)));   // restored position
+        var scr = Screens.WorkAreaAt((int)(x + size / 2.0), (int)(y + size / 2.0));
+        if (left is int l) p.PlaceNear(l + p.Width / 2, Screens.WorkAreaAt(l + p.Width / 2, Screen.PrimaryScreen!.Bounds.Bottom - 5));   // restored position
         else p.PlaceNear((int)(x + size / 2.0 + (isBed ? -1.4 : 1.2) * size), scr);
         p.FormClosed += (_, _) =>
         {
@@ -171,7 +174,7 @@ sealed class PetWindow : Form
     {
         if (ball != null) { ball.Close(); return; }
         var b = new BallWindow(Unit, S);
-        b.Bounced += () => Audio.Play("boing");
+        b.Bounced += loudness => Audio.Play("boing", loudness);
         b.FormClosed += (_, _) =>
         {
             if (ball == b) ball = null;
@@ -216,7 +219,7 @@ sealed class PetWindow : Form
         switch (gl)
         {
             case Goal.Bowl when bowl != null:   // stand left of the bowl, on the taskbar
-                return Clamp(bowl.Center.X - size, Screen.FromPoint(bowl.Center).WorkingArea.Bottom - size);
+                return Clamp(bowl.Center.X - size, Screens.WorkAreaAt(bowl.Center.X, bowl.Center.Y).Bottom - size);
             case Goal.Bed when bed != null:     // lie "inside" the bed: feet overlap its back half
                 return Clamp(bed.Center.X - size / 2.0, bed.Top + bed.Height * 0.55 - size);
             case Goal.Ball when ball != null:
@@ -353,7 +356,7 @@ sealed class PetWindow : Form
 
     Rectangle AreaFor(double px, double py)
     {
-        var wa = Screen.FromPoint(new Point((int)px, (int)py)).WorkingArea;
+        var wa = Screens.WorkAreaAt((int)px, (int)py);
         return new Rectangle(wa.Left, wa.Top, Math.Max(0, wa.Width - size), Math.Max(0, wa.Height - size));
     }
 
@@ -466,6 +469,9 @@ sealed class PetWindow : Form
     // ---- loops ----------------------------------------------------------------------------------
 
     // Every animation takes the same time per cycle (frame duration = cycle / frames)
+    // assigning Interval restarts the timer: only do it when the value really changes
+    void SetAnimInterval(int ms) { if (animT.Interval != ms) animT.Interval = ms; }
+
     void Animate()
     {
         Audio.Purr(state == "sleep");   // purring while asleep
@@ -479,11 +485,11 @@ sealed class PetWindow : Form
         Redraw();
         if (name == "sleep")
         {
-            // redraw 3x per frame so the floating z letters move smoothly
-            animT.Interval = Math.Max(15, (int)(Cfg.Cycle / a.frames / 3));
-            if (++sleepTick % 3 != 0) return;
+            // redraw 2x per frame so the floating z letters move smoothly
+            SetAnimInterval(Math.Max(15, (int)(Cfg.Cycle / a.frames / 2)));
+            if (++sleepTick % 2 != 0) return;
         }
-        else animT.Interval = Math.Max(15, (int)(Cfg.Cycle / a.frames));
+        else SetAnimInterval(Math.Max(15, (int)(Cfg.Cycle / a.frames)));
         frame = a.once ? Math.Min(frame + 1, a.frames - 1) : (frame + 1) % a.frames;
     }
 
@@ -602,7 +608,8 @@ sealed class PetWindow : Form
             if (!facingRight) px = size - px;
             float py = (float)(size * (0.62 - 0.32 * p));
             int alpha = (int)(255 * Math.Sin(Math.PI * p));
-            using var font = new Font("Segoe UI", (float)((7 + 6 * p) * S), FontStyle.Bold, GraphicsUnit.Point);
+            int fi = Math.Clamp((int)(p * 7), 0, 7);
+            var font = zFonts[fi] ??= new Font("Segoe UI", (float)((7 + 6 * fi / 7.0) * S), FontStyle.Bold, GraphicsUnit.Point);
             using var brush = new SolidBrush(Color.FromArgb(Math.Clamp(alpha, 0, 255), 0x9a, 0xb4, 0xff));
             g.DrawString("z", font, brush, px, py);
         }
@@ -619,6 +626,6 @@ sealed class PetWindow : Form
 
         if (currentAnim == "sleep") DrawZzz();
 
-        PushBitmap(Handle, buf, Left, Top);
+        surface.Push(Handle, Left, Top);
     }
 }

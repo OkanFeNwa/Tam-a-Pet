@@ -171,7 +171,7 @@ sealed class TaskbarProp : PropWindow
         IsBed = bed;
     }
 
-    static Rectangle Area(Point near) => Screen.FromPoint(near).WorkingArea;
+    static Rectangle Area(Point near) => Screens.WorkAreaAt(near.X, near.Y);
 
     protected override Point Constrain(Point p)
     {
@@ -180,9 +180,8 @@ sealed class TaskbarProp : PropWindow
     }
 
     // Put it on the taskbar of the screen holding centerX
-    public void PlaceNear(int centerX, Screen screen)
+    public void PlaceNear(int centerX, Rectangle wa)
     {
-        var wa = screen.WorkingArea;
         Location = new Point(Math.Clamp(centerX - Width / 2, wa.Left, wa.Right - Width), wa.Bottom - Height);
     }
 }
@@ -199,16 +198,15 @@ sealed class BallWindow : PropWindow
 
     const double Restitution = 0.78;
 
-    public event Action? Bounced;   // hit a wall or the floor hard enough to be heard
+    public event Action<double>? Bounced;   // hit a wall or the floor: argument = loudness 0.35..1 from the impact speed
     long lastBounceAt, waAt;
     Rectangle wa;
 
     void Bounce(double speed)
     {
         long now = Environment.TickCount64;
-        if (speed < 120 * S || now - lastBounceAt < 90) return;
-        lastBounceAt = now;
-        Bounced?.Invoke();
+        if (speed < 40 * S) return;   // below this it is just resting on the floor (gravity jitter), not a bounce
+        Bounced?.Invoke(Math.Clamp(speed / (900 * S), 0.5, 1));
     }
 
     public BallWindow(int u, float scale) : base(PixelArt.Render(PixelArt.BallArt, PixelArt.BallPal, u))
@@ -265,7 +263,7 @@ sealed class BallWindow : PropWindow
         if (held) return;
         long now = Environment.TickCount64;
         double dt = Math.Clamp((now - last) / 1000.0, 0, 0.05); last = now;
-        if (now - waAt > 250) { wa = Screen.FromPoint(new Point((int)x + Width / 2, (int)y + Height / 2)).WorkingArea; waAt = now; }   // looking up the screen every frame is slow
+        if (now - waAt > 250) { wa = Screens.WorkAreaAt((int)x + Width / 2, (int)y + Height / 2); waAt = now; }
         double left = wa.Left, right = wa.Right - Width, top = wa.Top, bottom = wa.Bottom - Height;
 
         vy += Gravity * dt;

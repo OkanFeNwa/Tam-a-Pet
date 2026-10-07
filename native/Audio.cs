@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using System.Media;
+using System.Runtime.InteropServices;
 
 // Cat sounds: real recordings embedded in the exe (native/sounds, see CREDITS.md), played with SoundPlayer.
 // Everything heavy (decoding, volume scaling, starting playback) runs on a background thread, so the cat and
@@ -11,8 +11,11 @@ static class Audio
 
     // ---- everything below is touched by the audio thread only (except the volatile flags) ----------
     static readonly Dictionary<string, Clip> clips = new();
-    static SoundPlayer? player;
-    static MemoryStream? stream;
+    // Straight to the Windows PlaySound API (SoundPlayer.Stop/Play blocked ~200 ms per call, so rapid sounds fell behind).
+    // A new PlaySound call replaces whatever is playing; the buffer must stay pinned until the next call.
+    [DllImport("winmm.dll", EntryPoint = "PlaySoundW")] static extern bool PlaySound(IntPtr sound, IntPtr module, uint flags);
+    const uint SND_NODEFAULT = 0x2, SND_ASYNC = 0x1, SND_MEMORY = 0x4, SND_LOOP = 0x8, SND_PURGE = 0x40;
+    static GCHandle pinned;
     static long busyUntil;                 // TickCount64 at which the current sound ends
     static string curName = "";
     static int curPrio;
@@ -89,14 +92,14 @@ static class Audio
 
     static string Pick(params string[] files) => files[rnd.Next(files.Length)];
 
-    public static void Play(string name)
+    public static void Play(string name, double loudness = 1)
     {
         double v = Volume;
         if (v < 0.01) return;
-        Post(() => PlayNow(name, v));
+        Post(() => PlayNow(name, v, loudness));
     }
 
-    static void PlayNow(string name, double v)
+    static void PlayNow(string name, double v, double loudness)
     {
         int prio = Prio(name);
         if (Environment.TickCount64 < busyUntil && !purring && !(prio > curPrio || (name == "boing" && curName == "boing"))) return;   // still playing
@@ -112,13 +115,12 @@ static class Audio
             case "munch": clip = Load(Pick("munch_3", "munch_4", "munch_5", "munch_6")); break;                         // eating
             case "boing":                                                                                               // ball bounces
                 if (boings.Length == 0) return;
-                clip = Load(boings[rnd.Next(boings.Length)].Substring(4)); rate = 0.95 + rnd.NextDouble() * 0.2; break;
+                clip = Load(boings[rnd.Next(boings.Length)].Substring(4)); rate = (0.95 + rnd.NextDouble() * 0.2) * (1.12 - 0.12 * loudness); break;   // small bounce: softer and a bit higher
             default: return;
         }
         purring = false;   // a sound cuts the purr (the cat was woken up)
-        Start(clip, v * v, rate, loop: false);
-        curName = name; curPrio = prio;
-    }
+        Start(clip, v * v * loudness, rate, loop: false);
+        curName = name; curPrio = prio;    }
 
     // Purring loop while the cat sleeps; call every frame with the desired state (it is cheap)
     public static void Purr(bool on)
@@ -127,7 +129,7 @@ static class Audio
         {
             if (!wantPurr && !purring) return;
             wantPurr = false;
-            Post(() => { if (purring) { player?.Stop(); purring = false; busyUntil = 0; } });
+            Post(() => { if (purring) { StopSound(); purring = false; busyUntil = 0; } });
             return;
         }
         wantPurr = true;
@@ -154,15 +156,19 @@ static class Audio
     // For development: write a sound to a WAV file (TamAPet.exe --dump-sound name file.wav)
     public static void Dump(string name, string path) => File.WriteAllBytes(path, Wav(Load(name), 1, 1));
 
+    static void StopSound()
+    {
+        PlaySound(IntPtr.Zero, IntPtr.Zero, SND_PURGE);
+        if (pinned.IsAllocated) pinned.Free();
+    }
+
     static void Start(Clip clip, double gain, double rate, bool loop)
     {
         var wav = Wav(clip, gain, rate);
-        player?.Stop();
-        stream?.Dispose();
-        stream = new MemoryStream(wav);
-        player ??= new SoundPlayer();
-        player.Stream = stream;
-        if (loop) player.PlayLooping(); else player.Play();
+        var handle = GCHandle.Alloc(wav, GCHandleType.Pinned);
+        PlaySound(handle.AddrOfPinnedObject(), IntPtr.Zero, SND_MEMORY | SND_ASYNC | SND_NODEFAULT | (loop ? SND_LOOP : 0));
+        if (pinned.IsAllocated) pinned.Free();   // the previous sound has been replaced
+        pinned = handle;
         double ms = clip.Pcm.Length / (double)clip.Channels / (clip.Rate * rate) * 1000;
         busyUntil = loop ? long.MaxValue : Environment.TickCount64 + (long)ms + 40;
     }
