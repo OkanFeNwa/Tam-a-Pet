@@ -7,9 +7,9 @@ Tamagotchi-style virtual pets that live on your Windows desktop. It starts with 
 <p align="center"><sub>Click the preview to watch the 25 s feature tour with sound (cats made up for the video: Miso, Pepper, Waffles and Juno).</sub></p>
 
 <p align="center">
-  <img src="docs/img/needs.jpg" alt="Pets using their bowl, bed and ball" width="32%">
-  <img src="docs/img/fight.jpg" alt="Two cats having a fight" width="32%">
-  <img src="docs/img/custom.jpg" alt="Customising a pet and its objects" width="32%">
+  <img src="docs/img/needs.jpg" alt="A cat eating from its bowl, which empties as the hunger bar fills" width="32%">
+  <img src="docs/img/fight.jpg" alt="Two cats hissing at each other" width="32%">
+  <img src="docs/img/custom.jpg" alt="Customising a cat: fur, pattern and accessories" width="32%">
 </p>
 
 > **Status: 0.1.0 (pre-release).** Work in progress: more features and bug fixes are coming before the first real release.
