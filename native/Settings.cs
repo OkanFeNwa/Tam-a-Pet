@@ -6,15 +6,17 @@ sealed record Trait(string Key, double Activity, double Appetite, double Lazines
 
 static class Characters
 {
+    // Multipliers on how fast a need drops (above 1 = faster), on top of the base times: hunger 10 min, happiness 5 min,
+    // energy 15 min (see PetWindow). "appetite" = hunger, "laziness" = energy, "mood" = happiness.
     //                                   activity appetite laziness mood pitch chatty
     public static readonly Trait[] All =
     {
         new("balanced", 1.00, 1.00, 1.00, 1.00, 1.00, 1.0),
-        new("playful",  1.35, 1.10, 0.90, 1.25, 1.10, 1.2),   // livelier, gets bored (sad) sooner
-        new("lazy",     0.55, 1.00, 1.35, 0.85, 0.92, 0.7),   // moves little but tires sooner
-        new("greedy",   0.90, 1.50, 1.00, 1.00, 0.96, 1.0),   // always hungry
-        new("chatty",   1.00, 1.00, 1.00, 1.00, 1.05, 2.5),   // meows a lot
-        new("needy",    1.00, 1.00, 1.00, 1.40, 1.08, 1.8, 1),   // wants attention: loses happiness faster, calls you and comes to the mouse
+        new("playful",  1.35, 1.15, 1.20, 1.30, 1.10, 1.2),   // livelier: burns food and energy faster, gets bored (sad) sooner
+        new("lazy",     0.55, 0.90, 1.35, 0.80, 0.92, 0.7),   // moves little but tires sooner; eats less and is easily content
+        new("greedy",   0.90, 1.60, 1.00, 1.00, 0.96, 1.0),   // always hungry
+        new("chatty",   1.00, 1.00, 1.00, 1.15, 1.05, 2.5),   // meows a lot and likes company: a bit less patient
+        new("needy",    1.00, 1.00, 1.00, 1.60, 1.08, 1.8, 1),   // wants attention: loses happiness faster, calls you and comes to the mouse
     };
 
     public static Trait Get(string key) => All.FirstOrDefault(t => t.Key == key) ?? All[0];
@@ -292,7 +294,7 @@ static class Str
             ["nav.objects"] = "Oggetti", ["obj.bowlbody"] = "Ciotola", ["obj.bowlfood"] = "Cibo", ["obj.bedouter"] = "Cuccia", ["obj.bedinner"] = "Cuscino", ["obj.ballbody"] = "Pallina", ["obj.ballring"] = "Contorno",
             ["picker.title"] = "Scegli un colore", ["picker.new"] = "Nuovo", ["picker.current"] = "Attuale", ["picker.recent"] = "Usati di recente", ["picker.ok"] = "Conferma", ["picker.cancel"] = "Annulla",
             ["act.pet"] = "Coccole",
-            ["cat.default"] = "Gatto", ["cat.on.label"] = "Secondo gatto", ["cat.on.hint"] = "Un secondo gatto, con le sue statistiche, il suo carattere e i suoi oggetti", ["char.title"] = "Carattere", ["char.balanced"] = "Equilibrato", ["char.playful"] = "Giocherellone", ["char.lazy"] = "Pigro", ["char.greedy"] = "Goloso", ["char.chatty"] = "Chiacchierone", ["char.needy"] = "Cerca attenzioni", ["char.needy.hint"] = "Si annoia presto, ti chiama e ti raggiunge col mouse.", ["char.balanced.hint"] = "Né troppo vivace né troppo pigro.", ["char.playful.hint"] = "Corre di più, si annoia in fretta e ha bisogno di attenzioni.", ["char.lazy.hint"] = "Si muove poco, ma si stanca prima.", ["char.greedy.hint"] = "Ha sempre fame: svuota la ciotola in fretta.", ["char.chatty.hint"] = "Miagola molto più spesso.", ["objs.title"] = "Oggetti", ["obj.color"] = "Colore", ["dev.target"] = "Gatto da controllare",
+            ["cat.default"] = "Gatto", ["cat.on.label"] = "Secondo gatto", ["cat.on.hint"] = "Un secondo gatto, con le sue statistiche, il suo carattere e i suoi oggetti", ["char.title"] = "Carattere", ["char.balanced"] = "Equilibrato", ["char.playful"] = "Giocherellone", ["char.lazy"] = "Pigro", ["char.greedy"] = "Goloso", ["char.chatty"] = "Chiacchierone", ["char.needy"] = "Cerca attenzioni", ["char.needy.hint"] = "La felicità cala molto in fretta: ti chiama e ti raggiunge col mouse.", ["char.balanced.hint"] = "Né troppo vivace né troppo pigro.", ["char.playful.hint"] = "Corre di più, consuma cibo ed energia più in fretta e si annoia presto.", ["char.lazy.hint"] = "Si muove poco, ma si stanca prima; mangia meno ed è facile da accontentare.", ["char.greedy.hint"] = "Ha sempre fame: svuota la ciotola in fretta.", ["char.chatty.hint"] = "Miagola molto più spesso e ha un po' meno pazienza.", ["objs.title"] = "Oggetti", ["obj.color"] = "Colore", ["dev.target"] = "Gatto da controllare",
             ["stat.hunger"] = "Fame", ["stat.happiness"] = "Felicità", ["stat.energy"] = "Energia",
             ["tray.settings"] = "Impostazioni...", 
             ["tray.exit"] = "Esci",
@@ -321,7 +323,7 @@ static class Str
             ["nav.objects"] = "Objects", ["obj.bowlbody"] = "Bowl", ["obj.bowlfood"] = "Food", ["obj.bedouter"] = "Bed", ["obj.bedinner"] = "Cushion", ["obj.ballbody"] = "Ball", ["obj.ballring"] = "Outline",
             ["picker.title"] = "Pick a colour", ["picker.new"] = "New", ["picker.current"] = "Current", ["picker.recent"] = "Recently used", ["picker.ok"] = "Done", ["picker.cancel"] = "Cancel",
             ["act.pet"] = "Petting",
-            ["cat.default"] = "Cat", ["cat.on.label"] = "Second cat", ["cat.on.hint"] = "A second cat, with its own stats, character and objects", ["char.title"] = "Character", ["char.balanced"] = "Balanced", ["char.playful"] = "Playful", ["char.lazy"] = "Lazy", ["char.greedy"] = "Greedy", ["char.chatty"] = "Chatty", ["char.needy"] = "Attention seeker", ["char.needy.hint"] = "Gets bored quickly, calls you and follows the mouse.", ["char.balanced.hint"] = "Neither too lively nor too lazy.", ["char.playful.hint"] = "Runs more, gets bored fast and needs attention.", ["char.lazy.hint"] = "Hardly moves, but tires sooner.", ["char.greedy.hint"] = "Always hungry: empties the bowl in no time.", ["char.chatty.hint"] = "Meows much more often.", ["objs.title"] = "Objects", ["obj.color"] = "Colour", ["dev.target"] = "Cat to control",
+            ["cat.default"] = "Cat", ["cat.on.label"] = "Second cat", ["cat.on.hint"] = "A second cat, with its own stats, character and objects", ["char.title"] = "Character", ["char.balanced"] = "Balanced", ["char.playful"] = "Playful", ["char.lazy"] = "Lazy", ["char.greedy"] = "Greedy", ["char.chatty"] = "Chatty", ["char.needy"] = "Attention seeker", ["char.needy.hint"] = "Happiness drops much faster: calls you and follows the mouse.", ["char.balanced.hint"] = "Neither too lively nor too lazy.", ["char.playful.hint"] = "Runs more, burns food and energy faster and gets bored soon.", ["char.lazy.hint"] = "Hardly moves, but tires sooner; eats less and is easy to please.", ["char.greedy.hint"] = "Always hungry: empties the bowl in no time.", ["char.chatty.hint"] = "Meows much more often and is a bit less patient.", ["objs.title"] = "Objects", ["obj.color"] = "Colour", ["dev.target"] = "Cat to control",
             ["stat.hunger"] = "Hunger", ["stat.happiness"] = "Happiness", ["stat.energy"] = "Energy",
             ["tray.settings"] = "Settings...", 
             ["tray.exit"] = "Exit",
