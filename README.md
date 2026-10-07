@@ -4,7 +4,7 @@ Tamagotchi-style virtual pets that live on your Windows desktop. It starts with 
 
 *Italiano: pet virtuali in stile tamagotchi sul desktop di Windows. Vedi il [riassunto in italiano](#italiano) in fondo.*
 
-[![Watch the video](docs/img/brag.jpg)](docs/brag.mp4)
+[![Watch the video (60 s)](docs/img/brag.jpg)](docs/brag.mp4)
 
 ![Settings: the cats](docs/img/cats.png)
 
