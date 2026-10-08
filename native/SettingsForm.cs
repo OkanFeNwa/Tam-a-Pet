@@ -569,18 +569,19 @@ sealed partial class SettingsForm : Form
             else ry = ColorRow(lc, Str.T("look.eyes"), cat.Eyes, EyePresets, c => { cat.Eyes = c; Cfg.Changed(cat); }, rx, ry, rw);
             if (!Cfg.ClassicSprites)
             {
-                var hl = Lbl(Str.T("hetero.label"), fBold, text, rx, ry + P(4), rw - P(56)); hl.BackColor = card; lc.Controls.Add(hl);
-                var ht = new Toggle(this) { On = cat.Eyes2 != null, Bounds = new Rectangle(rx + rw - P(44), ry + P(2), P(44), P(24)) };
-                ht.Changed += () => { cat.Eyes2 = ht.On ? cat.Eyes : null; Cfg.Changed(cat); Build(); };
-                lc.Controls.Add(ht);
-                ry += P(38);
-            }
-            if (!Cfg.ClassicSprites)
-            {
                 ry = ColorRow(lc, Str.T("look.nose"), cat.Nose, NosePresets, c => { cat.Nose = c; Cfg.Changed(cat); }, rx, ry, rw);
                 ry = ColorRow(lc, Str.T("look.ears"), cat.Ears, EarPresets, c => { cat.Ears = c; Cfg.Changed(cat); }, rx, ry, rw);
             }
-            lc.Height = Math.Max(P(16) * 2 + P(136), ry + P(6));
+            int under = P(16) + P(136) + P(12);   // under the picture of the cat: the switch for two different eyes
+            if (!Cfg.ClassicSprites)
+            {
+                var hl = Lbl(Str.T("hetero.label"), fBold, text, P(16), under + P(4), P(170) - P(56)); hl.BackColor = card; lc.Controls.Add(hl);
+                var ht = new Toggle(this) { On = cat.Eyes2 != null, Bounds = new Rectangle(P(16) + P(170) - P(44), under + P(2), P(44), P(24)) };
+                ht.Changed += () => { cat.Eyes2 = ht.On ? cat.Eyes : null; Cfg.Changed(cat); Build(); };
+                lc.Controls.Add(ht);
+                under += P(34);
+            }
+            lc.Height = Math.Max(under + P(8), Math.Max(P(16) * 2 + P(136), ry + P(6)));
             y += lc.Height + P(14);
             y = PatternCard(cat, pad, y, w);
 
