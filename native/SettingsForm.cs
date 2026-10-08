@@ -791,8 +791,17 @@ sealed partial class SettingsForm : Form
     sealed class Pill : Control
     {
         readonly SettingsForm f;
-        bool hover, pressed;
-        public bool Active;
+        bool hover, pressed, active;
+        // the look follows its state on springs: a press is felt at once, hover and selection glide, and a change in the middle of one
+        // starts from where it is now (never a jump); with "reduce animations" in Windows they are instant
+        readonly Spring act = new() { Response = 0.2 }, hov = new() { Response = 0.14 };
+        System.Windows.Forms.Timer? anim;
+        long animLast;
+        public bool Active
+        {
+            get => active;
+            set { if (active == value) return; active = value; Go(act, value ? 1 : 0); }
+        }
         public int Dot;   // a filled square of this size (logical pixels) instead of text: shows a size
         public string Glyph = "";   // an icon of the system's icon font, drawn before the text (alone when there is no text)
         public PillKind Kind;
@@ -803,31 +812,61 @@ sealed partial class SettingsForm : Form
             SetStyle(ControlStyles.Selectable, false);
             Cursor = Cursors.Hand;
         }
-        protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { hover = false; pressed = false; Invalidate(); base.OnMouseLeave(e); }
+
+        void Go(Spring s, double target)
+        {
+            s.Target = target;
+            if (!IsHandleCreated || !Spring.Enabled) { s.Value = target; s.Velocity = 0; Invalidate(); return; }
+            anim ??= NewTimer();
+            if (!anim.Enabled) { animLast = Environment.TickCount64; anim.Start(); }
+        }
+
+        System.Windows.Forms.Timer NewTimer()
+        {
+            var t = new System.Windows.Forms.Timer { Interval = 10 };
+            t.Tick += (_, _) =>
+            {
+                long now = Environment.TickCount64; double dt = (now - animLast) / 1000.0; animLast = now;
+                act.Step(dt); hov.Step(dt);
+                Invalidate();
+                if (act.Done && hov.Done) t.Stop();
+            };
+            return t;
+        }
+
+        protected override void Dispose(bool disposing) { if (disposing) anim?.Dispose(); base.Dispose(disposing); }
+
+        protected override void OnMouseEnter(EventArgs e) { hover = true; Go(hov, 1); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hover = false; pressed = false; Go(hov, 0); Invalidate(); base.OnMouseLeave(e); }
         protected override void OnMouseDown(MouseEventArgs e) { pressed = true; Invalidate(); base.OnMouseDown(e); }   // feedback on the press, not on the release
         protected override void OnMouseUp(MouseEventArgs e) { pressed = false; Invalidate(); base.OnMouseUp(e); }
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-            Color parentBg = Kind == PillKind.Nav ? f.sideBg : Kind == PillKind.Outline ? f.bg : f.card;
+            // behind the pill: what it sits on (a card, which may itself be lit by the pointer), so no corner of another colour shows
+            Color parentBg = Kind == PillKind.Nav ? f.sideBg : Parent is Card pc ? pc.CurrentFill : Kind == PillKind.Outline ? f.bg : f.card;
             g.Clear(parentBg);
             var r = pressed ? new Rectangle(f.P(1), f.P(1), Width - 1 - f.P(2), Height - 1 - f.P(2)) : new Rectangle(0, 0, Width - 1, Height - 1);   // pressed: it sinks a little
-            Color fill = parentBg, fore = f.text;
+            double a = Math.Clamp(act.Value, 0, 1), h = Math.Clamp(hov.Value, 0, 1);
+            Color fill = parentBg, fore = f.text, edge = f.line;
             switch (Kind)
             {
-                case PillKind.Nav: if (Active) fill = f.accentSoft; else if (hover) fill = f.bg; fore = Active ? f.accent : f.muted; break;
-                case PillKind.Seg: fill = Active ? f.accent : hover ? f.line : f.track; fore = Active ? Color.White : f.text; break;
-                case PillKind.Outline: fill = f.card; fore = hover ? f.accent : f.text; break;
+                case PillKind.Nav: fill = Mix(Mix(parentBg, f.bg, h), f.accentSoft, a); fore = Mix(f.muted, f.accent, a); break;
+                case PillKind.Seg: fill = Mix(Mix(f.track, f.line, h), f.accent, a); fore = Mix(f.text, Color.White, a); break;
+                case PillKind.Outline: fill = f.card; fore = Mix(f.text, f.accent, h); edge = Mix(f.line, f.accent, h); break;
             }
             if (pressed) fill = Mix(fill, f.text, 0.10);
             using (var path = RoundRect(r, f.P(10)))
             {
                 using (var b = new SolidBrush(fill)) g.FillPath(b, path);
-                if (Kind == PillKind.Outline) using (var pen = new Pen(hover ? f.accent : f.line)) g.DrawPath(pen, path);
+                if (Kind == PillKind.Outline) using (var pen = new Pen(edge)) g.DrawPath(pen, path);
             }
-            if (Kind == PillKind.Nav && Active)
-                using (var b = new SolidBrush(f.accent)) g.FillPath(b, RoundRect(new Rectangle(f.P(4), Height / 2 - f.P(9), f.P(3), f.P(18)), f.P(1)));
+            if (Kind == PillKind.Nav && a > 0.01)   // the marker grows from the middle
+            {
+                int mh = Math.Max(1, (int)(f.P(18) * a));
+                using var b = new SolidBrush(f.accent);
+                g.FillPath(b, RoundRect(new Rectangle(f.P(4), Height / 2 - mh / 2, f.P(3), mh), f.P(1)));
+            }
             if (Dot > 0)
             {
                 int d = f.P(Dot);
@@ -858,6 +897,7 @@ sealed partial class SettingsForm : Form
         Color hoverFill, hoverBorder;
         bool hover, pressed;
         public bool Interactive;
+        public Color CurrentFill => Interactive && hover ? (pressed ? Mix(hoverFill, Color.Black, 0.12) : hoverFill) : fill;   // what is behind the children now
         public void SetHover(Color f, Color b) { hoverFill = f; hoverBorder = b; Interactive = true; }
         public void SetState(bool h, bool p)
         {

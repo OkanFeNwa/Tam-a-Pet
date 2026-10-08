@@ -230,12 +230,7 @@ sealed partial class SettingsForm
             ("", "paint.undo", () => Undo(cat)),
             ("", "paint.redo", () => Redo(cat)),
             ("", "paint.clearframe", () => ClearFrame(cat)),
-            ("", "paint.clearall", () =>
-            {
-                if (cat.Hand == null) return;
-                if (MessageBox.Show(this, string.Format(Str.T("paint.clearall.ask"), cat.Display), Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-                undo.Clear(); redo.Clear(); HandPaint.Clear(cat); Cfg.Changed(cat); paintView?.Invalidate(); paintStrip?.Invalidate();
-            }),
+            ("", "paint.clearall", () => ClearAll(cat)),
         };
         int aw = (iw - gp * 3) / 4;
         for (int i = 0; i < actions.Length; i++)
@@ -530,6 +525,24 @@ sealed partial class SettingsForm
         paintView?.Invalidate(); paintStrip?.Invalidate();
     }
 
+    // everything painted by hand goes, in one step that can be undone (no "are you sure": undo is the safety net)
+    void ClearAll(CatProfile cat)
+    {
+        if (cat.Hand == null) return;
+        var s = new List<(int x, int y, int old, int now)>();
+        for (int y = 0; y < cat.Hand.Height; y++)
+            for (int x = 0; x < cat.Hand.Width; x++)
+            {
+                int old = cat.Hand.GetPixel(x, y).ToArgb();
+                if (old == 0) continue;
+                s.Add((x, y, old, 0)); cat.Hand.SetPixel(x, y, Color.Transparent);
+            }
+        if (s.Count == 0) return;
+        undo.Add(s); redo.Clear();
+        MarkDirty(cat);
+        paintView?.Invalidate(); paintStrip?.Invalidate();
+    }
+
     void ClearFrame(CatProfile cat)
     {
         if (cat.Hand == null) return;
@@ -660,7 +673,7 @@ sealed partial class SettingsForm
             bool on = Matches(preset, cat);
             var cell = new Card(bg, on ? accent : line, card, P(12)) { Bounds = new Rectangle(cx, cyy, cw, ch) };
             pc.Controls.Add(cell);
-            int tw = Math.Min(cw - P(16), P(112)), th = Math.Min(P(72), cw * 6 / 10);
+            int tw = Math.Min(cw - 2 * (P(6) + P(30) + P(6)), P(112)), th = Math.Min(P(72), cw * 6 / 10);   // the picture stays clear of the "⋯" button
             var thumb = Thumb(preset.Sample(), new Rectangle((cw - tw) / 2, P(10), tw, th)); thumb.BackColor = bg;
             cell.Controls.Add(thumb);
             var nm = Lbl(preset.Display, cw >= P(90) ? fBold : fSmall, text, P(4), P(10) + th + P(6), cw - P(8), ContentAlignment.TopCenter); nm.BackColor = bg; nm.AutoEllipsis = true; nm.Height = P(20); cell.Controls.Add(nm);
@@ -724,8 +737,40 @@ sealed partial class SettingsForm
         readonly SettingsForm f;
         readonly Bitmap sheet;
         readonly Func<Bitmap?> hand;
-        public int Row, Frame, Brush = 1;
+        public int Row, Frame;
         public bool Outline = true;   // show where the brush would paint
+        int brush = 1, fromBrush = 1;
+        readonly Spring grow = new() { Response = 0.18, Value = 1, Target = 1 };   // 0 = the size the brush had, 1 = the new one
+        System.Windows.Forms.Timer? anim;
+        long animLast;
+        public int Brush
+        {
+            get => brush;
+            set
+            {
+                if (value == brush) return;
+                double cur = fromBrush + (brush - fromBrush) * Math.Clamp(grow.Value, 0, 1.2);   // start from the size shown now, not from the old target
+                fromBrush = (int)Math.Round(cur); brush = value;
+                grow.Value = 0; grow.Velocity = 0; grow.Target = 1;
+                if (!IsHandleCreated || !Spring.Enabled) { grow.Value = 1; Invalidate(); return; }
+                anim ??= NewTimer();
+                if (!anim.Enabled) { animLast = Environment.TickCount64; anim.Start(); }
+            }
+        }
+
+        System.Windows.Forms.Timer NewTimer()
+        {
+            var t = new System.Windows.Forms.Timer { Interval = 10 };
+            t.Tick += (_, _) =>
+            {
+                long now = Environment.TickCount64; double dt = (now - animLast) / 1000.0; animLast = now;
+                grow.Step(dt); Invalidate();
+                if (grow.Done) t.Stop();
+            };
+            return t;
+        }
+
+        protected override void Dispose(bool disposing) { if (disposing) anim?.Dispose(); base.Dispose(disposing); }
         public event Action<int, int>? Down, Move;
         public event Action? Up;
         Point hover = new(-100, -100);
@@ -770,9 +815,10 @@ sealed partial class SettingsForm
                     for (int i = 0; i <= 32; i++) { g.DrawLine(pen, d.X + i * s, d.Y, d.X + i * s, d.Bottom); g.DrawLine(pen, d.X, d.Y + i * s, d.Right, d.Y + i * s); }
             if (Outline && hover.X >= 0 && hover.Y >= 0 && hover.X < 32 && hover.Y < 32)
             {
-                int off = (Brush - 1) / 2;
+                double t = grow.Value, size = fromBrush + (brush - fromBrush) * t;
+                double off = (fromBrush - 1) / 2 + ((brush - 1) / 2 - (fromBrush - 1) / 2) * t;   // integer halves, as the brush paints
                 using var pen = new Pen(f.accent, 2f);
-                g.DrawRectangle(pen, d.X + (hover.X - off) * s, d.Y + (hover.Y - off) * s, Brush * s, Brush * s);
+                g.DrawRectangle(pen, (float)(d.X + (hover.X - off) * s), (float)(d.Y + (hover.Y - off) * s), (float)(size * s), (float)(size * s));
             }
         }
 
@@ -817,8 +863,41 @@ sealed partial class SettingsForm
         readonly SettingsForm f;
         readonly Bitmap sheet;
         readonly Func<Bitmap?> hand;
-        public int Row, Frame, Count;
+        public int Row, Count;
         public event Action<int>? Pick;
+        int frame;
+        readonly Spring sx = new() { Response = 0.16 }, sy = new() { Response = 0.16 };   // where the outline is, one spring for each axis
+        System.Windows.Forms.Timer? anim;
+        long animLast;
+        bool placed;
+        public int Frame
+        {
+            get => frame;
+            set
+            {
+                frame = value;
+                var (cell, cols, gap) = Geometry();
+                sx.Target = frame % cols * (cell + gap); sy.Target = frame / cols * (cell + gap);
+                if (!placed || !IsHandleCreated || !Spring.Enabled) { sx.Value = sx.Target; sy.Value = sy.Target; sx.Velocity = sy.Velocity = 0; placed = Width > 0; Invalidate(); return; }
+                anim ??= NewTimer();
+                if (!anim.Enabled) { animLast = Environment.TickCount64; anim.Start(); }
+            }
+        }
+
+        System.Windows.Forms.Timer NewTimer()
+        {
+            var t = new System.Windows.Forms.Timer { Interval = 10 };
+            t.Tick += (_, _) =>
+            {
+                long now = Environment.TickCount64; double dt = (now - animLast) / 1000.0; animLast = now;
+                sx.Step(dt); sy.Step(dt);
+                Invalidate();
+                if (sx.Done && sy.Done) t.Stop();
+            };
+            return t;
+        }
+
+        protected override void Dispose(bool disposing) { if (disposing) anim?.Dispose(); base.Dispose(disposing); }
 
         public FrameStrip(SettingsForm owner, Bitmap sheetBitmap, Func<Bitmap?> handLayer)
         {
@@ -851,12 +930,18 @@ sealed partial class SettingsForm
                 using (var path = RoundRect(r, f.P(8)))
                 {
                     using (var b = new SolidBrush(f.track)) g.FillPath(b, path);
-                    using var pen = new Pen(i == Frame ? f.accent : f.line, i == Frame ? 2f : 1f); g.DrawPath(pen, path);
+                    using var pen = new Pen(f.line); g.DrawPath(pen, path);
                 }
                 g.InterpolationMode = InterpolationMode.NearestNeighbor; g.PixelOffsetMode = PixelOffsetMode.Half;
                 var d = new Rectangle(r.X + (cell - 32 * s) / 2, r.Y + (cell - 32 * s) / 2, 32 * s, 32 * s);
                 g.DrawImage(sheet, d, i * 32, Row * 32, 32, 32, GraphicsUnit.Pixel);
                 if (hand() is { } h) g.DrawImage(h, d, i * 32, Row * 32, 32, 32, GraphicsUnit.Pixel);
+            }
+            g.SmoothingMode = SmoothingMode.AntiAlias;   // the outline of the current picture: it travels from one to the next
+            if (Count > 0)
+            {
+                using var path = RoundRect(new Rectangle((int)Math.Round(sx.Value), (int)Math.Round(sy.Value), cell - 1, cell - 1), f.P(8));
+                using var pen = new Pen(f.accent, 2f); g.DrawPath(pen, path);
             }
         }
 
