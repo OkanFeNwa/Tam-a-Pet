@@ -75,7 +75,6 @@ static class CatSprite
         return row >= 0 && row < foot.Length ? foot[row] : 0;
     }
 
-    public static HashSet<(int, int)>? LastEyes;   // eye pixels of the last BuildNew (the painter uses them to know what a click hit)
     // the untouched art, for the colour studio: which part of the cat is at this pixel of the sheet, and how many pictures each row has
     static byte[]? rawBuf; static int rawW, rawH, rawStride;
     static void EnsureRaw()
@@ -103,24 +102,6 @@ static class CatSprite
             for (int x = 0; x < rawW; x++)
                 if (rawBuf![y * rawStride + x * 4 + 3] != 0) f[y / 32] = Math.Max(f[y / 32], x / 32 + 1);
         return f;
-    }
-
-    // "fur" | "shade" | "light" | "outline" | "ears" | "nose" | "eyes" | null (nothing there)
-    public static string? PartAt(int px, int py)
-    {
-        EnsureRaw();
-        if (px < 0 || py < 0 || px >= rawW || py >= rawH) return null;
-        int i = py * rawStride + px * 4;
-        if (rawBuf![i + 3] == 0) return null;
-        if (LastEyes?.Contains((px, py)) == true) return "eyes";
-        int r = rawBuf[i + 2], g = rawBuf[i + 1], b = rawBuf[i];
-        if (r == 202 && g == 113 && b == 159) return "nose";
-        if (r == 154 && g == 135 && b == 126) return "ears";
-        if (r == 18 && g == 14 && b == 20) return "outline";
-        if (r == 98 && g == 103 && b == 115) return "fur";
-        if (r == 65 && g == 71 && b == 82) return "shade";
-        if (r == 134 && g == 141 && b == 155) return "light";
-        return null;
     }
 
     public static Color Shade(Color c) => Color.FromArgb(c.R * 66 / 100, c.G * 66 / 100, c.B * 66 / 100);
@@ -212,7 +193,6 @@ static class CatSprite
             return false;
         }
 
-        LastEyes = eyePx;
         Color fur = p.Fur1, third = p.Fur3, white = Color.FromArgb(240, 240, 240);
         void Put(int i, Color c) { buf[i] = c.B; buf[i + 1] = c.G; buf[i + 2] = c.R; }
         for (int y = 0; y < H; y++)

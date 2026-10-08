@@ -49,7 +49,7 @@ sealed partial class SettingsForm : Form
     Bitmap? previewSheet;
     readonly float k;
     readonly Color bg, sideBg, card, text, muted, line, accent, accentSoft, track;
-    readonly Font fBase, fBold, fTitle, fSmall, fBrand;
+    readonly Font fBase, fBold, fTitle, fSmall, fBrand, fIcon;   // fIcon: the system's icon font
     readonly Icon appIcon;
     readonly Panel side = new BufferedPanel { Dock = DockStyle.Left };
     readonly Panel host = new BufferedPanel { Dock = DockStyle.Fill };
@@ -76,6 +76,7 @@ sealed partial class SettingsForm : Form
         line = Theme.Line; accent = Theme.Accent; accentSoft = Theme.AccentSoft; track = Theme.Track;
         fBase = new Font("Segoe UI", 9.5f); fBold = new Font("Segoe UI Semibold", 9.5f); fTitle = new Font("Segoe UI Semibold", 18f);
         fSmall = new Font("Segoe UI", 8.5f); fBrand = new Font("Segoe UI Semibold", 11f);
+        fIcon = new Font(FontFamily.Families.Any(x => x.Name == "Segoe Fluent Icons") ? "Segoe Fluent Icons" : "Segoe MDL2 Assets", 12f);
         using (var s = typeof(SettingsForm).Assembly.GetManifestResourceStream("icon.ico")!) appIcon = new Icon(s);
 
         Icon = appIcon;
@@ -137,7 +138,8 @@ sealed partial class SettingsForm : Form
             previewSheet?.Dispose();
             foreach (var pv in objPreviews) pv.Dispose();
             statsT?.Dispose(); scrollT?.Dispose(); paintT?.Dispose();
-            fBase.Dispose(); fBold.Dispose(); fTitle.Dispose(); fSmall.Dispose(); fBrand.Dispose(); appIcon.Dispose();
+            FlushPaint(); paintSaveT?.Dispose(); paintTip?.Dispose();
+            fBase.Dispose(); fBold.Dispose(); fTitle.Dispose(); fSmall.Dispose(); fBrand.Dispose(); fIcon.Dispose(); appIcon.Dispose();
         }
         base.Dispose(disposing);
     }
@@ -207,6 +209,8 @@ sealed partial class SettingsForm : Form
         objPreviews.Clear();
         statsT?.Dispose(); statsT = null;
         paintT?.Dispose(); paintT = null;
+        FlushPaint();
+        SyncPaintWindow();
         int keepScroll = bar.Value;
 
         int ny = P(84);
@@ -789,6 +793,7 @@ sealed partial class SettingsForm : Form
         readonly SettingsForm f;
         bool hover, pressed;
         public bool Active;
+        public string Glyph = "";   // an icon of the system's icon font, drawn before the text (alone when there is no text)
         public PillKind Kind;
         public Pill(SettingsForm owner)
         {
@@ -822,6 +827,16 @@ sealed partial class SettingsForm : Form
             }
             if (Kind == PillKind.Nav && Active)
                 using (var b = new SolidBrush(f.accent)) g.FillPath(b, RoundRect(new Rectangle(f.P(4), Height / 2 - f.P(9), f.P(3), f.P(18)), f.P(1)));
+            if (Glyph != "")
+            {
+                const TextFormatFlags nf = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter;
+                int gw = TextRenderer.MeasureText(Glyph, f.fIcon, Size.Empty, nf).Width;
+                int tw = Text == "" ? 0 : TextRenderer.MeasureText(Text, f.fBold, Size.Empty, nf).Width, gap = tw == 0 ? 0 : f.P(8);
+                int x0 = Math.Max(f.P(8), (Width - gw - gap - tw) / 2);
+                TextRenderer.DrawText(g, Glyph, f.fIcon, new Rectangle(x0, 0, gw + f.P(2), Height), fore, nf);
+                if (tw > 0) TextRenderer.DrawText(g, Text, f.fBold, new Rectangle(x0 + gw + gap, 0, Width - x0 - gw - gap, Height), fore, nf | TextFormatFlags.EndEllipsis);
+                return;
+            }
             var flags = TextFormatFlags.VerticalCenter | (Kind == PillKind.Nav ? TextFormatFlags.Left : TextFormatFlags.HorizontalCenter);
             var tr = Kind == PillKind.Nav ? new Rectangle(f.P(18), 0, Width - f.P(18), Height) : ClientRectangle;
             TextRenderer.DrawText(g, Text, f.fBold, tr, fore, flags);
