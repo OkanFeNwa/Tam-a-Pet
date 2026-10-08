@@ -74,6 +74,7 @@ static class CatSprite
         return row >= 0 && row < foot.Length ? foot[row] : 0;
     }
 
+    public static HashSet<(int, int)>? LastEyes;   // eye pixels of the last BuildNew (the painter uses them to know what a click hit)
     static Color Shade(Color c) => Color.FromArgb(c.R * 66 / 100, c.G * 66 / 100, c.B * 66 / 100);
     static Color Light(Color c) => Color.FromArgb(c.R + (255 - c.R) * 3 / 10, c.G + (255 - c.G) * 3 / 10, c.B + (255 - c.B) * 3 / 10);
 
@@ -163,6 +164,7 @@ static class CatSprite
             return false;
         }
 
+        LastEyes = eyePx;
         Color fur = p.Fur1, third = p.Fur3, white = Color.FromArgb(240, 240, 240);
         void Put(int i, Color c) { buf[i] = c.B; buf[i + 1] = c.G; buf[i + 2] = c.R; }
         for (int y = 0; y < H; y++)
@@ -174,6 +176,7 @@ static class CatSprite
                 byte b = orig[i], g = orig[i + 1], r = orig[i + 2];
                 if (r == 202 && g == 113 && b == 159) { Put(i, p.Nose); continue; }   // the nose
                 if (r == 154 && g == 135 && b == 126) { Put(i, p.Ears); continue; }   // inside the ears
+                if (r == 18 && g == 14 && b == 20) { if (p.Outline is Color oc) Put(i, oc); continue; }   // outline: as drawn unless the painter overrides it
                 int cls = r == 98 && g == 103 && b == 115 ? 0 : r == 65 && g == 71 && b == 82 ? 1 : r == 134 && g == 141 && b == 155 ? 2 : -1;   // main, shade, highlight
                 if (cls < 0) continue;   // outline, nose, whiskers, ...: as drawn
                 int fx = x % 32, fy = y % 32;
@@ -189,7 +192,7 @@ static class CatSprite
                         if (n > 0.4) src = third; else if (n < -1.2) src = white;
                         break;
                 }
-                Put(i, cls == 0 || p.Pattern == "none" ? src : cls == 1 ? Shade(src) : Light(src));   // no pattern: one flat colour
+                Put(i, cls == 0 || p.Pattern == "none" ? src : cls == 1 ? p.Shade ?? Shade(src) : p.Light ?? Light(src));   // no pattern: one flat colour
             }
         System.Runtime.InteropServices.Marshal.Copy(buf, 0, data.Scan0, buf.Length);
         sheet.UnlockBits(data);

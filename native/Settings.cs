@@ -35,6 +35,7 @@ sealed class CatProfile
     public Color Fur1, Fur2, Eyes;
     public Color Nose = CatSprite.DefaultNose, Ears = CatSprite.DefaultEars;   // new sprites: the pink nose and the inside of the ears
     public Color Fur3 = Color.FromArgb(0xE8, 0x91, 0x3C);   // the colour of the variant (stripes, patches)
+    public Color? Shade, Light, Outline;   // painter overrides for the three fur tones' shade/highlight and the outline (null = derived / as drawn)
     public string Accessory = "";   // "" or one of CatSprite.Accessories (new sprites only)
     public string Pattern = "none";   // none | tabby | patches | calico
     public int Volume = 100, VoiceVol = 100, PurrVol = 100, FxVol = 100;   // this pet in the mixer: all of it, then its voice, purring and effects
@@ -60,7 +61,7 @@ sealed class CatProfile
 
     public void ResetLook()
     {
-        Pattern = "none"; Accessory = ""; Nose = CatSprite.DefaultNose; Ears = CatSprite.DefaultEars;
+        Pattern = "none"; Accessory = ""; Shade = Light = Outline = null; Nose = CatSprite.DefaultNose; Ears = CatSprite.DefaultEars;
         if (Index == 0) { Fur1 = CatSprite.DefaultFur1; Fur2 = CatSprite.DefaultFur2; Eyes = CatSprite.DefaultEyes; }
         else
         {

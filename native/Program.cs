@@ -85,6 +85,8 @@ static class Program
             return;
         }
 
+        if (args.Contains("--paint")) { Application.Run(new PainterForm()); return; }   // lab: the colouring tool, standalone, no lock
+
         // Only one copy of the app can run: a second launch just exits. Always the same lock, whatever the settings folder.
         using var mutex = new Mutex(true, "TamAPet.SingleInstance", out bool first);
         if (!first) return;
