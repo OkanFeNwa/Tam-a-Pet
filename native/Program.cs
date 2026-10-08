@@ -64,6 +64,7 @@ static class Program
             return;
         }
 
+        if (args.Contains("--check-paint")) { Environment.Exit(HandPaint.SelfCheck() ? 0 : 1); }   // dev check of the hand painting layer
         if (args.Contains("--check-presets")) { Environment.Exit(LookPresets.SelfCheck() ? 0 : 1); }   // dev check: presets survive save/load, names stay unique
 
         int dr = Array.IndexOf(args, "--dump-reminder");

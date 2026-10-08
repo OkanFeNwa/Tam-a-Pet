@@ -28,8 +28,9 @@ static class CatSprite
         return d;
     }
 
-    public static Bitmap BuildSheet(CatProfile p) =>
-        Cfg.ClassicSprites ? BuildSheet(p.Fur1, p.Fur2, p.Eyes, p.Pattern, p.Fur3) : BuildNew(p);
+    // hand: draw what the owner painted by hand over the cat (the colour studio asks for the cat without it)
+    public static Bitmap BuildSheet(CatProfile p, bool hand = true) =>
+        Cfg.ClassicSprites ? BuildSheet(p.Fur1, p.Fur2, p.Eyes, p.Pattern, p.Fur3) : BuildNew(p, hand);
 
     // the accessories of the new sprites (each is a sheet with the same layout, holding only the accessory)
     public static readonly string[] Accessories = { "bow-red", "bow-pink", "bow-gold", "bow2-blue", "bow2-green", "bow2-pink", "glasses-red", "glasses-gold", "halo", "wings", "cupid", "santa-1", "santa-2", "antlers-red", "antlers-green" };
@@ -88,6 +89,12 @@ static class CatSprite
         rawW = b.Width; rawH = b.Height; rawStride = d.Stride; rawBuf = buf;
     }
 
+    public static bool Solid(int px, int py)
+    {
+        EnsureRaw();
+        return px >= 0 && py >= 0 && px < rawW && py < rawH && rawBuf![py * rawStride + px * 4 + 3] != 0;
+    }
+
     public static int[] RowFrames()
     {
         EnsureRaw();
@@ -121,7 +128,7 @@ static class CatSprite
 
     // The new cat has three fur tones (main, shade, highlight) and a pink nose: the owner's "fur" colour gives all three,
     // the eyes are the single dark dots inside the face, and the pattern colour is turned into the same three tones.
-    static Bitmap BuildNew(CatProfile p)
+    static Bitmap BuildNew(CatProfile p, bool hand)
     {
         var sheet = LoadRes("spr.cat");
         int W = sheet.Width, H = sheet.Height;
@@ -235,6 +242,20 @@ static class CatSprite
                 }
                 Put(i, cls == 0 || p.Pattern == "none" ? src : cls == 1 ? p.Shade ?? Shade(src) : p.Light ?? Light(src));   // no pattern: one flat colour
             }
+        if (hand && p.Hand is { } hb && hb.Width == W && hb.Height == H)   // painted by hand: only on the cat's own pixels
+        {
+            var hd = hb.LockBits(new Rectangle(0, 0, W, H), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            var hbuf = new byte[hd.Stride * H];
+            System.Runtime.InteropServices.Marshal.Copy(hd.Scan0, hbuf, 0, hbuf.Length);
+            hb.UnlockBits(hd);
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++)
+                {
+                    int i = y * stride + x * 4, j = y * hd.Stride + x * 4;
+                    if (hbuf[j + 3] == 0 || orig[i + 3] == 0) continue;
+                    buf[i] = hbuf[j]; buf[i + 1] = hbuf[j + 1]; buf[i + 2] = hbuf[j + 2];
+                }
+        }
         System.Runtime.InteropServices.Marshal.Copy(buf, 0, data.Scan0, buf.Length);
         sheet.UnlockBits(data);
 

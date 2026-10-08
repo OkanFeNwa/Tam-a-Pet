@@ -12,7 +12,7 @@ sealed partial class SettingsForm
     int[]? paintFrames;   // pictures in each row of the sheet
     System.Windows.Forms.Timer? paintT;
     PaintView? paintView;
-    Pill? paintRowPill;
+    Pill? paintRowPill, paintPlayPill;
     Label? paintInfo;
 
     // ---- the page ---------------------------------------------------------------------------------
@@ -22,6 +22,7 @@ sealed partial class SettingsForm
         LookPresets.EnsureLoaded();
         paintFrames ??= CatSprite.RowFrames();
         if (paintRow >= paintFrames.Length || paintFrames[paintRow] == 0) paintRow = 0;
+        if (paintCat != cat.Index) { paintCat = cat.Index; undo.Clear(); }
 
         var back = new Pill(this) { Text = "‹  " + cat.Display, Bounds = new Rectangle(pad, y - P(8), P(170), P(32)), Kind = PillKind.Outline };
         back.Click += (_, _) => { page = "cat" + cat.Index; bar.Value = 0; Build(); };
@@ -29,18 +30,56 @@ sealed partial class SettingsForm
         y += P(36);
         y = Title(Str.T("paint.title"), pad, y, w);
 
-        // the cat, big, with the animation controls beside it
+        // the cat, big, to paint on pixel by pixel; the tools and the animation controls under it
         var vc = AddCard(pad, y, w);
         previewSheet?.Dispose();
-        previewSheet = CatSprite.BuildSheet(cat);
-        int vs = P(208);
-        paintView = new PaintView(this, previewSheet) { Bounds = new Rectangle(P(16), P(16), vs, vs), Row = paintRow, Frame = paintFrame };
-        paintView.Pick += part => EditPart(cat, part);
+        previewSheet = CatSprite.BuildSheet(cat, false);   // the recoloured cat without the hand painting: PaintView draws that on top itself
+        int vs = w - P(32);
+        paintView = new PaintView(this, previewSheet, () => cat.Hand) { Bounds = new Rectangle(P(16), P(16), vs, vs), Row = paintRow, Frame = paintFrame, Brush = paintSize, Outline = paintTool is PaintTool.Brush or PaintTool.Eraser };
+        paintView.Down += (px, py) => PaintDown(cat, px, py);
+        paintView.Move += (px, py) => PaintMove(cat, px, py);
+        paintView.Up += () => PaintUp(cat);
         vc.Controls.Add(paintView);
-        int rx = P(16) + vs + P(18), rw = w - rx - P(16);
+        int cy = P(16) + vs + P(12);
 
-        var al = Lbl(Str.T("paint.anim"), fBold, text, rx, P(16), rw); al.BackColor = card; vc.Controls.Add(al);
-        paintRowPill = new Pill(this) { Kind = PillKind.Seg, Bounds = new Rectangle(rx, P(42), rw, P(34)) };
+        // tools
+        var tools = new (PaintTool t, string key)[] { (PaintTool.Brush, "tool.brush"), (PaintTool.Eraser, "tool.eraser"), (PaintTool.Pick, "tool.pick"), (PaintTool.Part, "tool.part") };
+        int tw = (w - P(32) - P(8) * 3) / 4;
+        for (int i = 0; i < tools.Length; i++)
+        {
+            var (t, key) = tools[i];
+            var tp = new Pill(this) { Text = Str.T(key), Kind = PillKind.Seg, Active = paintTool == t, Bounds = new Rectangle(P(16) + i * (tw + P(8)), cy, tw, P(34)) };
+            tp.Click += (_, _) => { paintTool = t; Build(); };
+            vc.Controls.Add(tp);
+        }
+        cy += P(34) + P(10);
+
+        // brush size and undo
+        var sl = Lbl(Str.T("paint.size"), fBold, text, P(16), cy + P(7), P(110)); sl.BackColor = card; vc.Controls.Add(sl);
+        int sw = P(46), sx = P(16) + P(110);
+        for (int s = 1; s <= 3; s++)
+        {
+            int size = s;
+            var sp = new Pill(this) { Text = s.ToString(), Kind = PillKind.Seg, Active = paintSize == s, Bounds = new Rectangle(sx + (s - 1) * (sw + P(6)), cy, sw, P(34)) };
+            sp.Click += (_, _) => { paintSize = size; Build(); };
+            vc.Controls.Add(sp);
+        }
+        int ux = sx + 3 * (sw + P(6)) + P(10);
+        var un = new Pill(this) { Text = Str.T("paint.undo"), Kind = PillKind.Seg, Bounds = new Rectangle(ux, cy, w - P(16) - ux, P(34)) };
+        un.Click += (_, _) => Undo(cat);
+        vc.Controls.Add(un);
+        cy += P(34) + P(14);
+
+        // which animation, which picture of it
+        int half = (w - P(32) - P(8)) / 2;
+        var lblAnim = Lbl(Str.T("paint.anim"), fBold, text, P(16), cy, w - P(32)); lblAnim.BackColor = card; vc.Controls.Add(lblAnim);
+        cy += P(24);
+        int ab = P(44);
+        var prevRow = new Pill(this) { Text = "‹", Kind = PillKind.Seg, Bounds = new Rectangle(P(16), cy, ab, P(34)) };
+        var nextRow = new Pill(this) { Text = "›", Kind = PillKind.Seg, Bounds = new Rectangle(w - P(16) - ab, cy, ab, P(34)) };
+        prevRow.Click += (_, _) => StepRow(-1);
+        nextRow.Click += (_, _) => StepRow(1);
+        paintRowPill = new Pill(this) { Kind = PillKind.Seg, Bounds = new Rectangle(P(16) + ab + P(6), cy, w - P(32) - ab * 2 - P(12), P(34)) };
         paintRowPill.Click += (_, _) =>
         {
             var m = new ContextMenuStrip();
@@ -55,31 +94,55 @@ sealed partial class SettingsForm
             MenuRenderer.Apply(m);
             m.Show(paintRowPill, new Point(0, paintRowPill!.Height + P(4)));
         };
-        vc.Controls.Add(paintRowPill);
-        int half = (rw - P(8)) / 2;
-        var prev = new Pill(this) { Text = "‹", Kind = PillKind.Seg, Bounds = new Rectangle(rx, P(84), half, P(34)) };
-        var next = new Pill(this) { Text = "›", Kind = PillKind.Seg, Bounds = new Rectangle(rx + half + P(8), P(84), half, P(34)) };
-        prev.Click += (_, _) => StepRow(-1);
-        next.Click += (_, _) => StepRow(1);
-        vc.Controls.Add(prev); vc.Controls.Add(next);
-        var play = new Pill(this) { Kind = PillKind.Seg, Active = paintPlay, Bounds = new Rectangle(rx, P(126), rw, P(34)) };
-        string PlayText() => (paintPlay ? "‖  " + Str.T("paint.pause") : "▶  " + Str.T("paint.play"));
-        play.Text = PlayText();
-        play.Click += (_, _) => { paintPlay = !paintPlay; play.Active = paintPlay; play.Text = PlayText(); play.Invalidate(); };
-        vc.Controls.Add(play);
-        paintInfo = Lbl("", fSmall, muted, rx, P(170), rw); paintInfo.BackColor = card; vc.Controls.Add(paintInfo);
-        var hint = Lbl(Str.T("paint.hint"), fSmall, muted, P(16), P(16) + vs + P(10), w - P(32)); hint.BackColor = card; vc.Controls.Add(hint);
+        vc.Controls.Add(prevRow); vc.Controls.Add(nextRow); vc.Controls.Add(paintRowPill);
+        cy += P(34) + P(10);
+
+        var prevFr = new Pill(this) { Text = "‹", Kind = PillKind.Seg, Bounds = new Rectangle(P(16), cy, ab, P(34)) };
+        var nextFr = new Pill(this) { Text = "›", Kind = PillKind.Seg, Bounds = new Rectangle(w - P(16) - ab, cy, ab, P(34)) };
+        prevFr.Click += (_, _) => StepFrame(-1);
+        nextFr.Click += (_, _) => StepFrame(1);
+        paintInfo = Lbl("", fBold, muted, P(16) + ab + P(6), cy + P(7), w - P(32) - ab * 2 - P(12), ContentAlignment.TopCenter); paintInfo.BackColor = card;
+        vc.Controls.Add(prevFr); vc.Controls.Add(nextFr); vc.Controls.Add(paintInfo);
+        cy += P(34) + P(10);
+
+        paintPlayPill = new Pill(this) { Kind = PillKind.Seg, Bounds = new Rectangle(P(16), cy, w - P(32), P(34)) };
+        paintPlayPill.Click += (_, _) => SetPlay(!paintPlay);
+        vc.Controls.Add(paintPlayPill);
+        SetPlay(paintPlay);
+        cy += P(34) + P(10);
+        var hint = Lbl(Str.T("paint.hint"), fSmall, muted, P(16), cy, w - P(32)); hint.BackColor = card; vc.Controls.Add(hint);
         vc.Height = hint.Bottom + P(14);
         y += vc.Height + P(14);
         ShowFrame();
         paintT = new System.Windows.Forms.Timer { Interval = 110 };
         paintT.Tick += (_, _) =>
         {
-            if (!paintPlay || paintFrames[paintRow] <= 1) return;
+            if (!paintPlay || painting || paintFrames[paintRow] <= 1) return;
             paintFrame = (paintFrame + 1) % paintFrames[paintRow];
             ShowFrame();
         };
         paintT.Start();
+
+        // the brush colour
+        view.Controls.Add(Lbl(Str.T("paint.brushcolor"), fBold, muted, pad + P(2), y, w));
+        y += P(28);
+        var bc = AddCard(pad, y, w);
+        int by = ColorRow(bc, Str.T("tool.brush"), brushColor, BrushPresets, c => brushColor = c, P(16), P(14), w - P(32));
+        bc.Height = by + P(4);
+        y += bc.Height + P(14);
+
+        // what was painted by hand
+        var clr = new Pill(this) { Text = Str.T("paint.clearframe"), Kind = PillKind.Outline, Bounds = new Rectangle(pad, y, (w - P(8)) / 2, P(34)) };
+        clr.Click += (_, _) => ClearFrame(cat);
+        var clrAll = new Pill(this) { Text = Str.T("paint.clearall"), Kind = PillKind.Outline, Bounds = new Rectangle(pad + (w - P(8)) / 2 + P(8), y, (w - P(8)) / 2, P(34)) };
+        clrAll.Click += (_, _) =>
+        {
+            if (cat.Hand == null) return;
+            if (MessageBox.Show(this, string.Format(Str.T("paint.clearall.ask"), cat.Display), Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            undo.Clear(); HandPaint.Clear(cat); Cfg.Changed(cat); Build();
+        };
+        view.Controls.Add(clr); view.Controls.Add(clrAll);
+        y += P(34) + P(22);
 
         // the parts, one colour each
         view.Controls.Add(Lbl(Str.T("paint.parts"), fBold, muted, pad + P(2), y, w));
@@ -110,6 +173,15 @@ sealed partial class SettingsForm
         return PresetsSection(cat, pad, y, w);
     }
 
+    void SetPlay(bool on)
+    {
+        paintPlay = on;
+        if (paintPlayPill == null) return;
+        paintPlayPill.Active = on;
+        paintPlayPill.Text = on ? "‖  " + Str.T("paint.pause") : "▶  " + Str.T("paint.play");
+        paintPlayPill.Invalidate();
+    }
+
     void ShowFrame()
     {
         if (paintView == null || paintFrames == null) return;
@@ -124,6 +196,112 @@ sealed partial class SettingsForm
         int n = paintFrames!.Length, r = paintRow;
         do r = (r + d + n) % n; while (paintFrames[r] == 0);
         paintRow = r; paintFrame = 0; ShowFrame();
+    }
+
+    // one picture at a time (this stops the animation: you are working on a picture)
+    void StepFrame(int d)
+    {
+        SetPlay(false);
+        int n = Math.Max(1, paintFrames![paintRow]);
+        paintFrame = (paintFrame + d + n) % n;
+        ShowFrame();
+    }
+
+    // ---- painting ----------------------------------------------------------------------------------
+
+    enum PaintTool { Brush, Eraser, Pick, Part }
+    PaintTool paintTool = PaintTool.Brush;
+    int paintSize = 1, paintCat = -1;
+    Color brushColor = Color.FromArgb(0xE0, 0x52, 0x5A);
+    static readonly Color[] BrushPresets = new[] { Color.Black }.Concat(ObjectPresets).ToArray();
+    bool painting;
+    Point lastDab;
+    List<(int x, int y, int old)>? stroke;   // the pixels the current stroke changed, with their previous colour (0 = nothing)
+    readonly List<List<(int x, int y, int old)>> undo = new();
+
+    void PaintDown(CatProfile cat, int px, int py)
+    {
+        if (paintTool == PaintTool.Pick || paintTool == PaintTool.Part)
+        {
+            if (paintTool == PaintTool.Part) { if (CatSprite.PartAt(paintFrame * 32 + px, paintRow * 32 + py) is { } part) EditPart(cat, part); return; }
+            if (paintView!.ColorAt(paintFrame * 32 + px, paintRow * 32 + py) is Color c) { brushColor = c; paintTool = PaintTool.Brush; Build(); }
+            return;
+        }
+        SetPlay(false);   // you cannot paint on a moving picture
+        painting = true; stroke = new(); lastDab = new Point(px, py);
+        Dab(cat, px, py);
+        paintView!.Invalidate();
+    }
+
+    void PaintMove(CatProfile cat, int px, int py)
+    {
+        if (!painting) return;
+        // every pixel on the line from the last position: a fast mouse does not leave gaps
+        int x0 = lastDab.X, y0 = lastDab.Y, dx = Math.Abs(px - x0), dy = -Math.Abs(py - y0), sx = x0 < px ? 1 : -1, sy = y0 < py ? 1 : -1, err = dx + dy;
+        while (true)
+        {
+            Dab(cat, x0, y0);
+            if (x0 == px && y0 == py) break;
+            int e2 = 2 * err;
+            if (e2 >= dy) { err += dy; x0 += sx; }
+            if (e2 <= dx) { err += dx; y0 += sy; }
+        }
+        lastDab = new Point(px, py);
+        paintView!.Invalidate();
+    }
+
+    void Dab(CatProfile cat, int cx, int cy)
+    {
+        int off = (paintSize - 1) / 2;
+        for (int j = 0; j < paintSize; j++)
+            for (int i = 0; i < paintSize; i++)
+            {
+                int x = cx - off + i, y = cy - off + j;
+                if (x < 0 || y < 0 || x >= 32 || y >= 32) continue;
+                int sx = paintFrame * 32 + x, sy = paintRow * 32 + y;
+                if (!CatSprite.Solid(sx, sy)) continue;   // only on the cat itself
+                var hand = paintTool == PaintTool.Eraser ? cat.Hand : HandPaint.Ensure(cat);
+                if (hand == null) continue;
+                int old = hand.GetPixel(sx, sy).ToArgb(), now = paintTool == PaintTool.Eraser ? 0 : Color.FromArgb(255, brushColor).ToArgb();
+                if (old == now) continue;
+                stroke!.Add((sx, sy, old));
+                hand.SetPixel(sx, sy, Color.FromArgb(now));
+            }
+    }
+
+    void PaintUp(CatProfile cat)
+    {
+        if (!painting) return;
+        painting = false;
+        if (stroke is { Count: > 0 }) { undo.Add(stroke); if (undo.Count > 60) undo.RemoveAt(0); HandPaint.Save(cat); Cfg.Changed(cat); }
+        stroke = null;
+    }
+
+    void Undo(CatProfile cat)
+    {
+        if (undo.Count == 0) return;
+        var s = undo[^1]; undo.RemoveAt(undo.Count - 1);
+        var hand = HandPaint.Ensure(cat);
+        foreach (var (x, y, old) in s) hand.SetPixel(x, y, Color.FromArgb(old));
+        HandPaint.Save(cat); Cfg.Changed(cat);
+        paintView?.Invalidate();
+    }
+
+    void ClearFrame(CatProfile cat)
+    {
+        if (cat.Hand == null) return;
+        var s = new List<(int x, int y, int old)>();
+        for (int y = 0; y < 32; y++)
+            for (int x = 0; x < 32; x++)
+            {
+                int sx = paintFrame * 32 + x, sy = paintRow * 32 + y, old = cat.Hand.GetPixel(sx, sy).ToArgb();
+                if (old == 0) continue;
+                s.Add((sx, sy, old)); cat.Hand.SetPixel(sx, sy, Color.Transparent);
+            }
+        if (s.Count == 0) return;
+        undo.Add(s);
+        HandPaint.Save(cat); Cfg.Changed(cat);
+        paintView?.Invalidate();
     }
 
     // the rows of the sheet, named from how the pet uses them (the order of the directions is PetWindow's)
@@ -330,27 +508,41 @@ sealed partial class SettingsForm
 
     // ---- controls ---------------------------------------------------------------------------------
 
-    // The cat, big, on its card: shows one picture of one row of the sheet; a click says which part of the cat was hit
+    // The cat, big, on its card: shows one picture of one row of the sheet, with what was painted by hand on top.
+    // The mouse reports positions in pixels of that picture (0-31, or outside while dragging out of it).
     sealed class PaintView : Control
     {
         readonly SettingsForm f;
         readonly Bitmap sheet;
-        public int Row, Frame;
-        public event Action<string>? Pick;
+        readonly Func<Bitmap?> hand;
+        public int Row, Frame, Brush = 1;
+        public bool Outline = true;   // show where the brush would paint
+        public event Action<int, int>? Down, Move;
+        public event Action? Up;
+        Point hover = new(-100, -100);
+        bool drag;
 
-        public PaintView(SettingsForm owner, Bitmap sheetBitmap)
+        public PaintView(SettingsForm owner, Bitmap sheetBitmap, Func<Bitmap?> handLayer)
         {
-            f = owner; sheet = sheetBitmap; BackColor = f.card; Cursor = Cursors.Hand;
+            f = owner; sheet = sheetBitmap; hand = handLayer; BackColor = f.card; Cursor = Cursors.Cross;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             SetStyle(ControlStyles.Selectable, false);
         }
 
-        int Scale => Math.Max(1, Math.Min((Width - f.P(16)) / 32, (Height - f.P(16)) / 32));
+        int Scale => Math.Max(1, Math.Min((Width - f.P(8)) / 32, (Height - f.P(8)) / 32));
 
         Rectangle Dest()
         {
             int s = Scale;   // the paws stand on the same line in every row
             return new Rectangle((Width - 32 * s) / 2, (Height - 32 * s) / 2 + CatSprite.FootDy(Row) * s, 32 * s, 32 * s);
+        }
+
+        // what the owner sees at a pixel of the sheet: the hand painting if any, else the recoloured cat (null: transparent)
+        public Color? ColorAt(int sx, int sy)
+        {
+            if (hand() is { } h) { var c = h.GetPixel(sx, sy); if (c.A != 0) return Color.FromArgb(255, c); }
+            var b = sheet.GetPixel(sx, sy);
+            return b.A == 0 ? null : Color.FromArgb(255, b);
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -360,17 +552,53 @@ sealed partial class SettingsForm
                 g.FillPath(b, path);
             g.InterpolationMode = InterpolationMode.NearestNeighbor;
             g.PixelOffsetMode = PixelOffsetMode.Half;
-            g.DrawImage(sheet, Dest(), Frame * 32, Row * 32, 32, 32, GraphicsUnit.Pixel);
+            var d = Dest(); int s = Scale;
+            g.DrawImage(sheet, d, Frame * 32, Row * 32, 32, 32, GraphicsUnit.Pixel);
+            if (hand() is { } h) g.DrawImage(h, d, Frame * 32, Row * 32, 32, 32, GraphicsUnit.Pixel);
+            g.SmoothingMode = SmoothingMode.None;
+            if (s >= 8)   // the pixel grid, faint
+                using (var pen = new Pen(Color.FromArgb(26, 255, 255, 255)))
+                    for (int i = 0; i <= 32; i++) { g.DrawLine(pen, d.X + i * s, d.Y, d.X + i * s, d.Bottom); g.DrawLine(pen, d.X, d.Y + i * s, d.Right, d.Y + i * s); }
+            if (Outline && hover.X >= 0 && hover.Y >= 0 && hover.X < 32 && hover.Y < 32)
+            {
+                int off = (Brush - 1) / 2;
+                using var pen = new Pen(f.accent, 2f);
+                g.DrawRectangle(pen, d.X + (hover.X - off) * s, d.Y + (hover.Y - off) * s, Brush * s, Brush * s);
+            }
+        }
+
+        Point Cell(MouseEventArgs e)
+        {
+            var d = Dest(); int s = Scale;
+            return new Point((int)Math.Floor((e.X - d.X) / (double)s), (int)Math.Floor((e.Y - d.Y) / (double)s));
         }
 
         protected override void OnMouseDown(MouseEventArgs e)
         {
             base.OnMouseDown(e);
-            var d = Dest(); int s = Scale;
-            int cx = (e.X - d.X) / s, cy = (e.Y - d.Y) / s;
-            if (e.X < d.X || e.Y < d.Y || cx >= 32 || cy >= 32) return;
-            if (CatSprite.PartAt(Frame * 32 + cx, Row * 32 + cy) is { } part) Pick?.Invoke(part);
+            if (e.Button != MouseButtons.Left) return;
+            drag = true; Capture = true;
+            var c = Cell(e); hover = c;
+            Down?.Invoke(c.X, c.Y);
         }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            var c = Cell(e);
+            if (c != hover) { hover = c; Invalidate(); }
+            if (drag) Move?.Invoke(c.X, c.Y);
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            if (!drag) return;
+            drag = false; Capture = false;
+            Up?.Invoke();
+        }
+
+        protected override void OnMouseLeave(EventArgs e) { hover = new Point(-100, -100); Invalidate(); base.OnMouseLeave(e); }
     }
 
     // asks for a name (a preset's): a small window in the same style as the colour picker
