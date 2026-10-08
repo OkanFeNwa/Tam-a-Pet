@@ -5,7 +5,7 @@ using System.Windows.Forms;
 
 // Settings window. Controls are custom-painted (rounded cards, slider, pills) to look modern;
 // it is created when opened and disposed when closed, so it costs no memory while closed.
-sealed class SettingsForm : Form
+sealed partial class SettingsForm : Form
 {
     static readonly (string code, string name)[] Languages = { ("en", "English"), ("it", "Italiano"), ("fr", "Français"), ("es", "Español") };
 
@@ -62,7 +62,7 @@ sealed class SettingsForm : Form
     readonly HashSet<int> mixCats = new();   // cats whose sounds are expanded in the mixer
     bool focusName = true;
     System.Windows.Forms.Timer? statsT;
-    string page = Environment.GetCommandLineArgs().Contains("--cat") ? "cat0" : Environment.GetCommandLineArgs().Contains("--cat2") ? "cat1" : Environment.GetCommandLineArgs().Contains("--cat3") ? "cat2" : Environment.GetCommandLineArgs().Contains("--cats") ? "cats" : Environment.GetCommandLineArgs().Contains("--pets") ? "pets"
+    string page = Environment.GetCommandLineArgs().Contains("--cat") ? "cat0" : Environment.GetCommandLineArgs().Contains("--cat2") ? "cat1" : Environment.GetCommandLineArgs().Contains("--cat3") ? "cat2" : Environment.GetCommandLineArgs().Contains("--paint") ? "paint0" : Environment.GetCommandLineArgs().Contains("--cats") ? "cats" : Environment.GetCommandLineArgs().Contains("--pets") ? "pets"
         : Environment.GetCommandLineArgs().Contains("--credits") ? "credits" : Environment.GetCommandLineArgs().Contains("--volumes") ? "volumes" : Environment.GetCommandLineArgs().Contains("--info") ? "info" : "general";
     int devTarget;   // the cat the developer buttons act on
 
@@ -136,7 +136,7 @@ sealed class SettingsForm : Form
             Cfg.LanguageChanged -= Rebuild;
             previewSheet?.Dispose();
             foreach (var pv in objPreviews) pv.Dispose();
-            statsT?.Dispose(); scrollT?.Dispose();
+            statsT?.Dispose(); scrollT?.Dispose(); paintT?.Dispose();
             fBase.Dispose(); fBold.Dispose(); fTitle.Dispose(); fSmall.Dispose(); fBrand.Dispose(); appIcon.Dispose();
         }
         base.Dispose(disposing);
@@ -206,6 +206,7 @@ sealed class SettingsForm : Form
         foreach (var pv in objPreviews) pv.Dispose();
         objPreviews.Clear();
         statsT?.Dispose(); statsT = null;
+        paintT?.Dispose(); paintT = null;
         int keepScroll = bar.Value;
 
         int ny = P(84);
@@ -455,6 +456,11 @@ sealed class SettingsForm : Form
             }
             else view.Controls.Add(Lbl(string.Format(Str.T("cats.max"), Cfg.MaxCats), fSmall, muted, pad, y + P(6), w));
         }
+        else if (page.StartsWith("paint"))
+        {
+            var pcat = int.TryParse(page.AsSpan(5), out int pci) && Cfg.ById(pci) is { } pf ? pf : Cfg.Cats[0];
+            y = BuildPaint(pcat, pad, y, w);
+        }
         else
         {
             // one cat: its name, volume, character, look and objects (each cat is independent from the others)
@@ -557,54 +563,18 @@ sealed class SettingsForm : Form
             }
             lc.Height = Math.Max(P(16) * 2 + P(136), ry + P(6));
             y += lc.Height + P(14);
-            view.Controls.Add(Lbl(Str.T("pattern.title"), fBold, muted, pad + P(2), y, w));
-            y += P(28);
-            var ptc = AddCard(pad, y, w);
-            string[] pats = { "none", "tabby", "patches", "calico" };
-            int ptw = (w - P(32) - P(8) * 3) / 4;
-            for (int i = 0; i < pats.Length; i++)
-            {
-                string pn2 = pats[i];
-                var pp = new Pill(this) { Text = Str.T("pattern." + pn2), Kind = PillKind.Seg, Active = cat.Pattern == pn2, Bounds = new Rectangle(P(16) + i * (ptw + P(8)), P(14), ptw, P(34)) };
-                pp.Click += (_, _) =>
-                {
-                    if (cat.Pattern != pn2) cat.Fur3 = CatSprite.DefaultVariantColor(pn2, cat.Fur3);   // each variant starts with its own colour
-                    cat.Pattern = pn2; Cfg.Changed(cat); Build();
-                };
-                ptc.Controls.Add(pp);
-            }
-            ptc.Height = P(62);
-            y += ptc.Height + P(14);
+            y = PatternCard(cat, pad, y, w);
 
-            if (!Cfg.ClassicSprites)   // accessories: only the new sprites have them
-            {
-                view.Controls.Add(Lbl(Str.T("acc.title"), fBold, muted, pad + P(2), y, w));
-                y += P(28);
-                var acc = AddCard(pad, y, w);
-                var ids = new List<string> { "" };
-                ids.AddRange(CatSprite.Accessories);
-                string AccName(string id) => id == "" ? Str.T("acc.none") : Str.T("acc." + id);
-                var accDrop = new Pill(this) { Text = AccName(cat.Accessory) + "  ▾", Kind = PillKind.Seg, Bounds = new Rectangle(P(16), P(14), w - P(32), P(36)) };
-                accDrop.Click += (_, _) =>
-                {
-                    var m = new ContextMenuStrip();
-                    foreach (var id in ids)
-                    {
-                        var aid = id;
-                        var it = new ToolStripMenuItem(AccName(aid)) { Checked = cat.Accessory == aid };
-                        it.Click += (_, _) => { cat.Accessory = aid; Cfg.Changed(cat); Build(); };
-                        m.Items.Add(it);
-                    }
-                    MenuRenderer.Apply(m);
-                    m.Show(accDrop, new Point(0, accDrop.Height + P(4)));
-                };
-                acc.Controls.Add(accDrop);
-                acc.Height = P(14) + P(36) + P(14);
-                y += acc.Height + P(14);
-            }
+            y = AccessoryCard(cat, pad, y, w);
             var resetLook = new Pill(this) { Text = Str.T("look.reset"), Bounds = new Rectangle(pad, y + P(2), P(190), P(34)), Kind = PillKind.Outline };
             resetLook.Click += (_, _) => { cat.ResetLook(); Cfg.Changed(cat); Build(); };
             view.Controls.Add(resetLook);
+            if (!Cfg.ClassicSprites)
+            {
+                var studio = new Pill(this) { Text = Str.T("paint.open"), Bounds = new Rectangle(pad + P(200), y + P(2), w - P(200), P(34)), Kind = PillKind.Seg, Active = true };
+                studio.Click += (_, _) => { page = "paint" + cat.Index; bar.Value = 0; Build(); };
+                view.Controls.Add(studio);
+            }
             y += P(34) + P(22);
 
             // objects: which ones this cat has, and the colour of each (the shades are derived from it)
@@ -662,7 +632,7 @@ sealed class SettingsForm : Form
         bar.Setup(view.Height, host.ClientSize.Height);
     }
 
-    bool NavActive(string id) => id == "pets" ? page.StartsWith("cat") : id == "info" ? page is "info" or "credits" : page == id;
+    bool NavActive(string id) => id == "pets" ? page.StartsWith("cat") || page.StartsWith("paint") : id == "info" ? page is "info" or "credits" : page == id;
 
     // makes a card (or any control with children) react to a click anywhere on it
     void Clickable(Card c, Action a)

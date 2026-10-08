@@ -75,8 +75,49 @@ static class CatSprite
     }
 
     public static HashSet<(int, int)>? LastEyes;   // eye pixels of the last BuildNew (the painter uses them to know what a click hit)
-    static Color Shade(Color c) => Color.FromArgb(c.R * 66 / 100, c.G * 66 / 100, c.B * 66 / 100);
-    static Color Light(Color c) => Color.FromArgb(c.R + (255 - c.R) * 3 / 10, c.G + (255 - c.G) * 3 / 10, c.B + (255 - c.B) * 3 / 10);
+    // the untouched art, for the colour studio: which part of the cat is at this pixel of the sheet, and how many pictures each row has
+    static byte[]? rawBuf; static int rawW, rawH, rawStride;
+    static void EnsureRaw()
+    {
+        if (rawBuf != null) return;
+        using var b = LoadRes("spr.cat");
+        var d = b.LockBits(new Rectangle(0, 0, b.Width, b.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppPArgb);
+        var buf = new byte[d.Stride * d.Height];
+        System.Runtime.InteropServices.Marshal.Copy(d.Scan0, buf, 0, buf.Length);
+        b.UnlockBits(d);
+        rawW = b.Width; rawH = b.Height; rawStride = d.Stride; rawBuf = buf;
+    }
+
+    public static int[] RowFrames()
+    {
+        EnsureRaw();
+        var f = new int[rawH / 32];
+        for (int y = 0; y < rawH; y++)
+            for (int x = 0; x < rawW; x++)
+                if (rawBuf![y * rawStride + x * 4 + 3] != 0) f[y / 32] = Math.Max(f[y / 32], x / 32 + 1);
+        return f;
+    }
+
+    // "fur" | "shade" | "light" | "outline" | "ears" | "nose" | "eyes" | null (nothing there)
+    public static string? PartAt(int px, int py)
+    {
+        EnsureRaw();
+        if (px < 0 || py < 0 || px >= rawW || py >= rawH) return null;
+        int i = py * rawStride + px * 4;
+        if (rawBuf![i + 3] == 0) return null;
+        if (LastEyes?.Contains((px, py)) == true) return "eyes";
+        int r = rawBuf[i + 2], g = rawBuf[i + 1], b = rawBuf[i];
+        if (r == 202 && g == 113 && b == 159) return "nose";
+        if (r == 154 && g == 135 && b == 126) return "ears";
+        if (r == 18 && g == 14 && b == 20) return "outline";
+        if (r == 98 && g == 103 && b == 115) return "fur";
+        if (r == 65 && g == 71 && b == 82) return "shade";
+        if (r == 134 && g == 141 && b == 155) return "light";
+        return null;
+    }
+
+    public static Color Shade(Color c) => Color.FromArgb(c.R * 66 / 100, c.G * 66 / 100, c.B * 66 / 100);
+    public static Color Light(Color c) => Color.FromArgb(c.R + (255 - c.R) * 3 / 10, c.G + (255 - c.G) * 3 / 10, c.B + (255 - c.B) * 3 / 10);
 
     // The new cat has three fur tones (main, shade, highlight) and a pink nose: the owner's "fur" colour gives all three,
     // the eyes are the single dark dots inside the face, and the pattern colour is turned into the same three tones.

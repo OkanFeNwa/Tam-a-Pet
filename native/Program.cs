@@ -64,6 +64,8 @@ static class Program
             return;
         }
 
+        if (args.Contains("--check-presets")) { Environment.Exit(LookPresets.SelfCheck() ? 0 : 1); }   // dev check: presets survive save/load, names stay unique
+
         int dr = Array.IndexOf(args, "--dump-reminder");
         if (dr >= 0 && dr + 1 < args.Length)
         {
@@ -84,8 +86,6 @@ static class Program
             img.Save(args[dump + 1]);
             return;
         }
-
-        if (args.Contains("--paint")) { Application.Run(new PainterForm()); return; }   // lab: the colouring tool, standalone, no lock
 
         // Only one copy of the app can run: a second launch just exits. Always the same lock, whatever the settings folder.
         using var mutex = new Mutex(true, "TamAPet.SingleInstance", out bool first);
