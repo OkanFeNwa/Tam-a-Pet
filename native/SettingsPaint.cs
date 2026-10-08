@@ -45,6 +45,12 @@ sealed partial class SettingsForm
 
     // ---- the page ---------------------------------------------------------------------------------
 
+    Panel? paintFramePanel;
+    readonly List<Pill> viewPills = new();
+
+    // rows 0-3 hold one pose seen from different sides (pictures to choose from, not frames to play); the others are animations
+    bool IsAnimated(int row) => row > 3 && paintFrames![row] > 1;
+
     int BuildPaint(CatProfile cat, int pad, int y, int w)
     {
         LookPresets.EnsureLoaded();
@@ -63,66 +69,150 @@ sealed partial class SettingsForm
         view.Controls.Add(Lbl(Str.T("paint.title"), fTitle, text, pad + P(186), y - P(1), w - P(186)));
         y += P(48);
 
-        // Full screen: everything fits in the window, no scrolling. 3 columns when there is room (cat | tools | looks and presets),
-        // 2 columns on a narrower screen (the second one scrolls), 1 in the small window.
-        int limit = host.ClientSize.Height - pad;   // the lowest the content may reach without scrolling
-        int gap = P(14), mode = w >= P(1180) ? 3 : w >= P(860) ? 2 : 1;
-        int midW = mode == 3 ? P(340) : P(400), rightW = P(330);
-        int canvasW = mode == 1 ? w : mode == 2 ? w - midW - gap : w - midW - rightW - gap * 2;
-        int top = y;
+        int gap = P(14), limit = host.ClientSize.Height - pad;   // limit: the lowest the content may reach without scrolling
+        if (w < P(900))   // the small window: one column, it scrolls
+        {
+            y = CanvasCard(cat, pad, y, w, w - P(32)) + gap;
+            y = AnimCard(cat, pad, y, w, 0, false) + gap;
+            y = ToolsCard(cat, pad, y, w, 0) + gap;
+            y = BrushColorCard(pad, y, w, 0) + gap;
+            y = VariantsCard(cat, pad, y, w, 0) + gap;
+            return PresetsSection(cat, pad, y, w, 0);
+        }
 
-        // the cat, big, to paint on pixel by pixel
-        var vc = AddCard(pad, y, canvasW);
+        // Full screen, everything in view: above, the cat, the animations and the presets; below, the tools, the colour and the variants
+        int hb = P(190), animW = P(300);
+        int top = y, topH = limit - top - hb - gap;
+        int vs = Math.Max(P(240), Math.Min(topH - P(32), w - animW - P(300) - gap * 2 - P(32)));
+        int canvasW = vs + P(32);
+        int cbottom = CanvasCard(cat, pad, top, canvasW, vs);
+        int ax = pad + canvasW + gap;
+        AnimCard(cat, ax, top, animW, cbottom - top, true);
+        int y2 = cbottom + gap;
+        PresetsSection(cat, ax + animW + gap, top, w - canvasW - animW - gap * 2, y2 - gap);
+
+        int tw = P(340), vw = P(330), cw = w - tw - vw - gap * 2;
+        ToolsCard(cat, pad, y2, tw, hb);
+        BrushColorCard(pad + tw + gap, y2, cw, hb);
+        VariantsCard(cat, pad + tw + gap + cw + gap, y2, vw, hb);
+        return y2 + hb;
+    }
+
+    // the cat, big, to paint on pixel by pixel; returns the y under the card
+    int CanvasCard(CatProfile cat, int x, int y, int w, int vs)
+    {
+        var vc = AddCard(x, y, w);
         previewSheet?.Dispose();
         previewSheet = CatSprite.BuildSheet(cat, false);   // the recoloured cat without the hand painting: PaintView draws that on top itself
-        int vs = mode == 1 ? canvasW - P(32) : Math.Min(canvasW - P(32), Math.Max(P(300), limit - top - P(32)));
-        paintView = new PaintView(this, previewSheet, () => cat.Hand) { Bounds = new Rectangle((canvasW - vs) / 2, P(16), vs, vs), Row = paintRow, Frame = paintFrame, Brush = paintSize, Outline = paintTool != PaintTool.Pick };
+        paintView = new PaintView(this, previewSheet, () => cat.Hand) { Bounds = new Rectangle((w - vs) / 2, P(16), vs, vs), Row = paintRow, Frame = paintFrame, Brush = paintSize, Outline = paintTool != PaintTool.Pick };
         paintView.Down += (px, py) => PaintDown(cat, px, py);
         paintView.Move += (px, py) => PaintMove(cat, px, py);
         paintView.Up += () => PaintUp(cat);
         vc.Controls.Add(paintView);
         vc.Height = vs + P(32);
-        int bottom = top + vc.Height;
-
-        if (mode == 1)
-        {
-            y = BuildMid(cat, pad, bottom + gap, w, true, P(130));
-            return BuildRight(cat, pad, y, w, 0);
-        }
-        int x2 = pad + canvasW + gap;
-        if (mode == 2)
-        {
-            y = BuildMid(cat, x2, top, midW, false, P(130));
-            return Math.Max(bottom, BuildRight(cat, x2, y, midW, 0));
-        }
-        int ym = BuildMid(cat, x2, top, midW, false, P(210));   // the room left under the tools goes to the colour square
-        int yr = BuildRight(cat, x2 + midW + gap, top, rightW, limit);
-        return Math.Max(bottom, Math.Max(ym, yr));
+        return y + vc.Height;
     }
 
-    // the tools and the brush colour
-    int BuildMid(CatProfile cat, int x, int y, int w, bool hint, int squareH)
+    // which animation (or pose), and which picture of it
+    int AnimCard(CatProfile cat, int x, int y, int w, int h, bool hintAtBottom)
     {
-        y = ToolsCard(cat, x, y, w, hint);
-        return BrushColorCard(x, y + P(14), w, squareH);
+        int iw = w - P(32);
+        var ac = AddCard(x, y, w);
+        paintRowPill = new Pill(this) { Kind = PillKind.Seg, Bounds = new Rectangle(P(16), P(16), iw, P(40)) };
+        paintRowPill.Click += (_, _) =>
+        {
+            var cm = new ContextMenuStrip();
+            void Header(string t) { cm.Items.Add(new ToolStripMenuItem(t) { Enabled = false }); }
+            void Rows(bool animated)
+            {
+                for (int r = 0; r < paintFrames!.Length; r++)
+                {
+                    if (paintFrames[r] == 0 || (r > 3 && paintFrames[r] > 1) != animated) continue;
+                    int row = r;
+                    var it = new ToolStripMenuItem(RowLabel(row)) { Checked = row == paintRow };
+                    it.Click += (_, _) => { paintRow = row; paintFrame = 0; FillFramePanel(); SetPlay(IsAnimated(row)); };
+                    cm.Items.Add(it);
+                }
+            }
+            Header(Str.T("paint.static")); Rows(false);
+            cm.Items.Add(new ToolStripSeparator());
+            Header(Str.T("paint.animated")); Rows(true);
+            MenuRenderer.Apply(cm);
+            cm.Show(paintRowPill, new Point(0, paintRowPill!.Height + P(4)));
+        };
+        ac.Controls.Add(paintRowPill);
+        paintFramePanel = new Panel { BackColor = card, Bounds = new Rectangle(P(16), P(16) + P(40) + P(14), iw, P(46)) };
+        ac.Controls.Add(paintFramePanel);
+        FillFramePanel();
+        var hint = Lbl(Str.T("paint.hint"), fSmall, muted, P(16), paintFramePanel.Bottom + P(14), iw); hint.BackColor = card;
+        if (hintAtBottom && h > 0) hint.Top = Math.Max(hint.Top, h - hint.Height - P(14));
+        ac.Controls.Add(hint);
+        ac.Height = h > 0 ? h : hint.Bottom + P(16);
+        paintT?.Dispose();
+        paintT = new System.Windows.Forms.Timer { Interval = 110 };
+        paintT.Tick += (_, _) =>
+        {
+            if (!paintPlay || painting || !IsAnimated(paintRow)) return;
+            paintFrame = (paintFrame + 1) % paintFrames![paintRow];
+            ShowFrame();
+        };
+        paintT.Start();
+        return y + ac.Height;
     }
 
-    // the pattern, "reset colours" and the presets
-    int BuildRight(CatProfile cat, int x, int y, int w, int limit)
+    // an animation: previous, play, next and "picture 3 of 6"; a pose: one button for each side it can be seen from
+    void FillFramePanel()
     {
-        y = PatternCard(cat, x, y, w);
-        var resetLook = new Pill(this) { Text = Str.T("look.reset"), Bounds = new Rectangle(x, y + P(2), P(190), P(34)), Kind = PillKind.Outline };
-        resetLook.Click += (_, _) => { cat.ResetLook(); Cfg.Changed(cat); Build(); };
-        view.Controls.Add(resetLook);
-        y += P(34) + P(18);
-        return PresetsSection(cat, x, y, w, limit);
+        var pn = paintFramePanel!;
+        foreach (Control c in pn.Controls.Cast<Control>().ToList()) c.Dispose();
+        viewPills.Clear(); paintInfo = null; paintPlayPill = null;
+        int bg = P(6);
+        if (IsAnimated(paintRow))
+        {
+            int fw = P(52);
+            var prev = new Pill(this) { Glyph = "", Kind = PillKind.Seg, Bounds = new Rectangle(0, 0, fw, P(40)) };
+            paintPlayPill = new Pill(this) { Kind = PillKind.Seg, Bounds = new Rectangle(fw + bg, 0, fw, P(40)) };
+            var next = new Pill(this) { Glyph = "", Kind = PillKind.Seg, Bounds = new Rectangle((fw + bg) * 2, 0, fw, P(40)) };
+            prev.Click += (_, _) => StepFrame(-1);
+            next.Click += (_, _) => StepFrame(1);
+            paintPlayPill.Click += (_, _) => SetPlay(!paintPlay);
+            int ix = (fw + bg) * 3 + P(4);
+            paintInfo = Lbl("", fBold, muted, ix, P(11), Math.Max(P(40), pn.Width - ix)); paintInfo.BackColor = card; paintInfo.TextAlign = ContentAlignment.TopRight;
+            pn.Controls.Add(prev); pn.Controls.Add(paintPlayPill); pn.Controls.Add(next); pn.Controls.Add(paintInfo);
+            pn.Height = P(40);
+            SetPlay(paintPlay);
+        }
+        else
+        {
+            int n = paintFrames![paintRow], cw = (pn.Width - bg) / 2;
+            for (int i = 0; i < n; i++)
+            {
+                int frame = i;
+                var vp = new Pill(this) { Text = ViewName(paintRow, i), Kind = PillKind.Seg, Bounds = new Rectangle((i % 2) * (cw + bg), (i / 2) * (P(38) + bg), cw, P(38)) };
+                vp.Click += (_, _) => { paintFrame = frame; ShowFrame(); };
+                viewPills.Add(vp); pn.Controls.Add(vp);
+            }
+            pn.Height = (n + 1) / 2 * (P(38) + bg) - bg;
+        }
+        ShowFrame();
     }
 
-    int ToolsCard(CatProfile cat, int x, int y, int w, bool hint)
+    // the sides of the sitting and standing cat, as the pet uses them (the others are just numbered)
+    static string ViewName(int row, int i)
+    {
+        if (row <= 1 && i < 6) return Str.T("dir." + new[] { "front", "back", "left", "right", "dl", "dr" }[i]);
+        return string.Format(Str.T("paint.view"), i + 1);
+    }
+
+    void Tip(Control c, string text) => paintTip?.SetToolTip(c, text);
+
+    // ---- tools -------------------------------------------------------------------------------------
+
+    int ToolsCard(CatProfile cat, int x, int y, int w, int h)
     {
         int iw = w - P(32);
         var tc = AddCard(x, y, w);
-        int cy = P(16);
+        int cy = P(16), bw = P(44), bg = P(6);
 
         // tool: brush, eraser, eyedropper
         var tools = new (PaintTool t, string glyph, string key)[] { (PaintTool.Brush, "", "tool.brush"), (PaintTool.Eraser, "", "tool.eraser"), (PaintTool.Pick, "", "tool.pick") };
@@ -130,23 +220,25 @@ sealed partial class SettingsForm
         for (int i = 0; i < tools.Length; i++)
         {
             var (t, glyph, key) = tools[i];
-            var tp = new Pill(this) { Glyph = glyph, Kind = PillKind.Seg, Active = paintTool == t, Bounds = new Rectangle(P(16) + i * (tw + P(8)), cy, tw, P(42)) };
+            var tp = new Pill(this) { Glyph = glyph, Kind = PillKind.Seg, Active = paintTool == t, Bounds = new Rectangle(P(16) + i * (tw + P(8)), cy, tw, P(46)) };
             tp.Click += (_, _) => SetTool(t);
             Tip(tp, Str.T(key));
             toolPills[t] = tp; tc.Controls.Add(tp);
         }
-        cy += P(42) + P(10);
+        cy += P(46) + P(10);
 
-        // size on the left, undo and clear on the right
-        int bw = P(40), bg = P(6);
+        // size
         for (int s = 1; s <= 3; s++)
         {
             int size = s;
-            var sp = new Pill(this) { Text = s.ToString(), Kind = PillKind.Seg, Active = paintSize == s, Bounds = new Rectangle(P(16) + (s - 1) * (bw + bg), cy, bw, P(40)) };
+            var sp = new Pill(this) { Text = s.ToString(), Kind = PillKind.Seg, Active = paintSize == s, Bounds = new Rectangle(P(16) + (s - 1) * (tw + P(8)), cy, tw, P(40)) };
             sp.Click += (_, _) => SetSize(size);
             Tip(sp, Str.T("paint.size") + " " + s);
             sizePills[s] = sp; tc.Controls.Add(sp);
         }
+        cy += P(40) + P(10);
+
+        // undo, clear this picture, clear everything
         var actions = new (string glyph, string key, Action act)[]
         {
             ("", "paint.undo", () => Undo(cat)),
@@ -161,94 +253,70 @@ sealed partial class SettingsForm
         for (int i = 0; i < actions.Length; i++)
         {
             var (glyph, key, act) = actions[i];
-            var ap = new Pill(this) { Glyph = glyph, Kind = PillKind.Seg, Bounds = new Rectangle(P(16) + iw - (3 - i) * bw - (2 - i) * bg, cy, bw, P(40)) };
+            var ap = new Pill(this) { Glyph = glyph, Kind = PillKind.Seg, Bounds = new Rectangle(P(16) + i * (tw + P(8)), cy, tw, P(40)) };
             ap.Click += (_, _) => act();
             Tip(ap, Str.T(key));
             tc.Controls.Add(ap);
         }
-        cy += P(40) + P(14);
-
-        // which animation, which picture of it
-        paintRowPill = new Pill(this) { Kind = PillKind.Seg, Bounds = new Rectangle(P(16), cy, iw, P(36)) };
-        paintRowPill.Click += (_, _) =>
-        {
-            var m = new ContextMenuStrip();
-            for (int r = 0; r < paintFrames!.Length; r++)
-            {
-                if (paintFrames[r] == 0) continue;
-                int row = r;
-                var it = new ToolStripMenuItem(RowLabel(row)) { Checked = row == paintRow };
-                it.Click += (_, _) => { paintRow = row; paintFrame = 0; ShowFrame(); };
-                m.Items.Add(it);
-            }
-            MenuRenderer.Apply(m);
-            m.Show(paintRowPill, new Point(0, paintRowPill!.Height + P(4)));
-        };
-        tc.Controls.Add(paintRowPill);
-        cy += P(36) + P(10);
-
-        int fw = P(46);
-        var prevFr = new Pill(this) { Glyph = "", Kind = PillKind.Seg, Bounds = new Rectangle(P(16), cy, fw, P(40)) };
-        paintPlayPill = new Pill(this) { Kind = PillKind.Seg, Bounds = new Rectangle(P(16) + fw + bg, cy, fw, P(40)) };
-        var nextFr = new Pill(this) { Glyph = "", Kind = PillKind.Seg, Bounds = new Rectangle(P(16) + (fw + bg) * 2, cy, fw, P(40)) };
-        prevFr.Click += (_, _) => StepFrame(-1);
-        nextFr.Click += (_, _) => StepFrame(1);
-        paintPlayPill.Click += (_, _) => SetPlay(!paintPlay);
-        tc.Controls.Add(prevFr); tc.Controls.Add(paintPlayPill); tc.Controls.Add(nextFr);
-        int ix = P(16) + (fw + bg) * 3 + P(6);
-        paintInfo = Lbl("", fBold, muted, ix, cy + P(11), P(16) + iw - ix); paintInfo.BackColor = card; paintInfo.TextAlign = ContentAlignment.TopRight; tc.Controls.Add(paintInfo);
-        SetPlay(paintPlay);
-        cy += P(40);
-        if (hint)
-        {
-            cy += P(10);
-            var h = Lbl(Str.T("paint.hint"), fSmall, muted, P(16), cy, iw); h.BackColor = card; tc.Controls.Add(h);
-            cy = h.Bottom;
-        }
-        tc.Height = cy + P(16);
-        ShowFrame();
-        paintT?.Dispose();
-        paintT = new System.Windows.Forms.Timer { Interval = 110 };
-        paintT.Tick += (_, _) =>
-        {
-            if (!paintPlay || painting || paintFrames![paintRow] <= 1) return;
-            paintFrame = (paintFrame + 1) % paintFrames[paintRow];
-            ShowFrame();
-        };
-        paintT.Start();
+        cy += P(40) + P(16);
+        tc.Height = h > 0 ? h : cy;
         return y + tc.Height;
     }
 
-    void Tip(Control c, string text) => paintTip?.SetToolTip(c, text);
+    // the pattern of the fur and "reset colours"
+    int VariantsCard(CatProfile cat, int x, int y, int w, int h)
+    {
+        int iw = w - P(32);
+        var vc = AddCard(x, y, w);
+        string[] pats = { "none", "tabby", "patches", "calico" };
+        int pw = (iw - P(8)) / 2, cy = P(16);
+        for (int i = 0; i < pats.Length; i++)
+        {
+            string pn = pats[i];
+            var pp = new Pill(this) { Text = Str.T("pattern." + pn), Kind = PillKind.Seg, Active = cat.Pattern == pn, Bounds = new Rectangle(P(16) + (i % 2) * (pw + P(8)), cy + (i / 2) * P(46), pw, P(38)) };
+            pp.Click += (_, _) =>
+            {
+                if (cat.Pattern != pn) cat.Fur3 = CatSprite.DefaultVariantColor(pn, cat.Fur3);   // each variant starts with its own colour
+                cat.Pattern = pn; Cfg.Changed(cat); Build();
+            };
+            vc.Controls.Add(pp);
+        }
+        cy += P(46) * 2 + P(6);
+        var reset = new Pill(this) { Text = Str.T("look.reset"), Kind = PillKind.Seg, Bounds = new Rectangle(P(16), cy, iw, P(38)) };
+        reset.Click += (_, _) => { cat.ResetLook(); Cfg.Changed(cat); Build(); };
+        vc.Controls.Add(reset);
+        cy += P(38) + P(16);
+        vc.Height = h > 0 ? h : cy;
+        return y + vc.Height;
+    }
 
     // ---- brush colour ------------------------------------------------------------------------------
 
-    int BrushColorCard(int x, int y, int w, int squareH)
+    // the colour square on the left; on its right the hue, the colour in hex and the colours used lately
+    int BrushColorCard(int x, int y, int w, int h)
     {
         var cc = AddCard(x, y, w);
-        int iw = w - P(32), cy = P(16);
-        pSv = new SvBox(this) { Bounds = new Rectangle(P(16), cy, iw, squareH), Hue = pH, S = pS, V = pV };
-        cy += squareH + P(8);
-        pHue = new HueBar(this) { Bounds = new Rectangle(P(16), cy, iw, P(24)), Hue = pH };
-        cy += P(24) + P(10);
-        pChip = new ColorChip(this) { Fill = brushColor, Bounds = new Rectangle(P(16), cy, P(64), P(34)) };
-        var hl = Lbl("Hex", fBold, muted, P(16) + P(76), cy + P(8), P(36)); hl.BackColor = card;
-        var field = new Card(track, line, card, P(8)) { Bounds = new Rectangle(P(16) + P(76) + P(40), cy, P(130), P(34)) };
-        pHex = new TextBox { MaxLength = 7, BorderStyle = BorderStyle.None, BackColor = track, ForeColor = text, Font = fBase, Bounds = new Rectangle(P(10), P(8), P(110), P(20)), Text = "#" + CatSprite.Hex(brushColor) };
+        int iw = w - P(32), svW = Math.Min(P(260), iw * 55 / 100), svH = h > 0 ? h - P(32) : P(150);
+        int rx = P(16) + svW + P(16), rw = iw - svW - P(16);
+        pSv = new SvBox(this) { Bounds = new Rectangle(P(16), P(16), svW, svH), Hue = pH, S = pS, V = pV };
+        pHue = new HueBar(this) { Bounds = new Rectangle(rx, P(16), rw, P(24)), Hue = pH };
+        int cy = P(16) + P(24) + P(12);
+        pChip = new ColorChip(this) { Fill = brushColor, Bounds = new Rectangle(rx, cy, P(56), P(36)) };
+        var field = new Card(track, line, card, P(8)) { Bounds = new Rectangle(rx + P(64), cy, rw - P(64), P(36)) };
+        pHex = new TextBox { MaxLength = 7, BorderStyle = BorderStyle.None, BackColor = track, ForeColor = text, Font = fBase, Bounds = new Rectangle(P(10), P(9), rw - P(64) - P(20), P(20)), Text = "#" + CatSprite.Hex(brushColor) };
         field.Controls.Add(pHex);
         pSv.Changed += () => { pS = pSv.S; pV = pSv.V; ApplyHsv(); };
         pHue.Changed += () => { pH = pHue.Hue; pSv.Hue = pH; ApplyHsv(); };
         pHex.TextChanged += (_, _) => { if (!pSync && CatSprite.TryParse(pHex.Text.TrimStart('#'), out var c)) SetBrush(c, false); };
-        cc.Controls.Add(pSv); cc.Controls.Add(pHue); cc.Controls.Add(pChip); cc.Controls.Add(hl); cc.Controls.Add(field);
-        cy += P(34) + P(16);
-
-        var rl = Lbl(Str.T("picker.recent"), fBold, muted, P(16), cy, iw); rl.BackColor = card; cc.Controls.Add(rl);
-        cy += P(24);
-        pRecent = new Panel { Bounds = new Rectangle(P(16), cy, iw, P(30)), BackColor = card };
+        cc.Controls.Add(pSv); cc.Controls.Add(pHue); cc.Controls.Add(pChip); cc.Controls.Add(field);
+        cy += P(36) + P(14);
+        var rl = Lbl(Str.T("picker.recent"), fSmall, muted, rx, cy, rw); rl.BackColor = card; cc.Controls.Add(rl);
+        cy += P(20);
+        pRecent = new Panel { Bounds = new Rectangle(rx, cy, rw, Math.Max(P(60), P(16) + svH - cy)), BackColor = card };
         cc.Controls.Add(pRecent);
         FillRecent();
-        cc.Height = cy + P(30) + P(14);
-        return y + cc.Height + P(14);
+        cc.Height = h > 0 ? h : P(16) + Math.Max(svH, pRecent.Bottom - P(16)) + P(16);
+        return y + cc.Height;
     }
 
     void ApplyHsv()
@@ -273,14 +341,14 @@ sealed partial class SettingsForm
     {
         if (pRecent == null) return;
         foreach (Control c in pRecent.Controls.Cast<Control>().ToList()) c.Dispose();
-        int sx = 0, sz = P(26);
+        int sz = P(26), gp = P(6), perRow = Math.Max(1, (pRecent.Width + gp) / (sz + gp)), i = 0;
         foreach (var rc in Cfg.Recent)
         {
             var picked = rc;
-            var sw = new Swatch(this) { Fill = rc, Selected = rc.ToArgb() == brushColor.ToArgb(), Bounds = new Rectangle(sx, 0, sz, sz) };
+            var sw = new Swatch(this) { Fill = rc, Selected = rc.ToArgb() == brushColor.ToArgb(), Bounds = new Rectangle(i % perRow * (sz + gp), i / perRow * (sz + gp), sz, sz) };
             sw.Click += (_, _) => { SetBrush(picked, true); FillRecent(); };
             pRecent.Controls.Add(sw);
-            sx += sz + P(6);
+            i++;
         }
     }
 
@@ -326,6 +394,7 @@ sealed partial class SettingsForm
         paintView.Invalidate();
         if (paintRowPill != null) { paintRowPill.Text = RowLabel(paintRow) + "  ▾"; paintRowPill.Invalidate(); }
         if (paintInfo != null) paintInfo.Text = string.Format(Str.T("paint.frame"), paintFrame + 1, paintFrames[paintRow]);
+        for (int i = 0; i < viewPills.Count; i++) { viewPills[i].Active = i == paintFrame; viewPills[i].Invalidate(); }
     }
 
     // one picture at a time (this stops the animation: you are working on a picture)
