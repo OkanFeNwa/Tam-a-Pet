@@ -15,7 +15,12 @@ sealed partial class SettingsForm
     PaintTool paintTool = PaintTool.Brush;
     Color brushColor = Color.FromArgb(0xE0, 0x52, 0x5A);
     int[]? paintFrames;   // pictures in each row of the sheet
-    System.Windows.Forms.Timer? paintT, paintSaveT;
+    System.Windows.Forms.Timer? paintT, paintStatusT;
+    Bitmap? paintDraft;   // the drawing being made: it only reaches the cat on "Save"
+    bool paintChanged;
+    Pill? paintSavePill;
+    Label? paintStatusLbl;
+    string paintStatusText = "", paintPageName = "paint0";
     PaintView? paintView;
     Pill? paintRowPill, paintPlayPill;
     Label? paintInfo;
@@ -25,7 +30,6 @@ sealed partial class SettingsForm
     SvBox? pSv; HueBar? pHue; ColorChip? pChip; TextBox? pHex; Panel? pRecent;
     double pH, pS, pV;
     bool pSync;
-    CatProfile? paintDirty;   // painted but not saved yet
 
     // the window goes full screen when the studio opens and back to its size when it closes
     void SyncPaintWindow()
@@ -57,7 +61,14 @@ sealed partial class SettingsForm
         paintCatObj = cat;
         paintFrames ??= CatSprite.RowFrames();
         if (paintRow >= paintFrames.Length || paintFrames[paintRow] == 0) paintRow = 0;
-        if (paintCat != cat.Index) { paintCat = cat.Index; undo.Clear(); redo.Clear(); }
+        paintPageName = page;
+        if (paintDraft == null || paintCat != cat.Index)   // opening the studio: the draft starts as the saved drawing
+        {
+            DropDraft(); paintCat = cat.Index;
+            paintDraft = new Bitmap(HandPaint.W, HandPaint.H, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            if (cat.Hand != null) using (var g = Graphics.FromImage(paintDraft)) { g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy; g.DrawImage(cat.Hand, 0, 0, HandPaint.W, HandPaint.H); }
+        }
+        EnableDrop(cat);
         toolPills.Clear(); sizePills.Clear();
         paintTip?.Dispose(); paintTip = new ToolTip();
         paintBuiltW = host.ClientSize.Width;
@@ -67,7 +78,20 @@ sealed partial class SettingsForm
         var back = new Pill(this) { Text = cat.Display, Glyph = "", Bounds = new Rectangle(pad, y - P(4), P(170), P(36)), Kind = PillKind.Outline };
         back.Click += (_, _) => { page = "cat" + cat.Index; bar.Value = 0; Build(); };
         view.Controls.Add(back);
-        view.Controls.Add(Lbl(Str.T("paint.title"), fTitle, text, pad + P(186), y - P(1), w - P(186)));
+        view.Controls.Add(Lbl(Str.T("paint.title"), fTitle, text, pad + P(186), y - P(1), P(320)));   // narrow: it must not cover the buttons
+
+        // Share and Save, on the right (under the title in the small window); a line of status next to them
+        int hw = P(124), hg = P(8), hy = y - P(4), hx = pad + w - hw * 2 - hg;
+        if (w < P(900)) { y += P(48); hy = y - P(4); hx = pad; }
+        var sharePill = new Pill(this) { Text = Str.T("paint.share"), Glyph = "\uE72D", Kind = PillKind.Seg, Bounds = new Rectangle(hx, hy, hw, P(36)) };
+        sharePill.Click += (_, _) => ShareMenu(cat, sharePill);
+        paintSavePill = new Pill(this) { Text = Str.T("paint.save"), Glyph = "\uE74E", Kind = PillKind.Seg, Active = paintChanged, Bounds = new Rectangle(hx + hw + hg, hy, hw, P(36)) };
+        paintSavePill.Click += (_, _) => { if (paintChanged) { CommitDraft(cat); ShowStatus(Str.T("paint.saved")); } };
+        view.Controls.Add(sharePill); view.Controls.Add(paintSavePill);
+        Tip(sharePill, Str.T("paint.share")); Tip(paintSavePill, Str.T("paint.save"));
+        int sx0 = w < P(900) ? hx + hw * 2 + hg * 2 : pad + P(520), sx1 = w < P(900) ? pad + w : hx - P(12);
+        paintStatusLbl = Lbl(paintStatusText, fSmall, muted, sx0, hy + P(9), Math.Max(P(60), sx1 - sx0), w < P(900) ? ContentAlignment.TopLeft : ContentAlignment.TopRight);
+        view.Controls.Add(paintStatusLbl);
         y += P(48);
 
         int gap = P(14), limit = host.ClientSize.Height - pad;   // limit: the lowest the content may reach without scrolling
@@ -105,7 +129,7 @@ sealed partial class SettingsForm
         var vc = AddCard(x, y, w);
         previewSheet?.Dispose();
         previewSheet = CatSprite.BuildSheet(cat, false);   // the recoloured cat without the hand painting: PaintView draws that on top itself
-        paintView = new PaintView(this, previewSheet, () => cat.Hand) { Bounds = new Rectangle((w - vs) / 2, P(16), vs, vs), Row = paintRow, Frame = paintFrame, Brush = paintSize, Outline = paintTool != PaintTool.Pick };
+        paintView = new PaintView(this, previewSheet, () => paintDraft) { Bounds = new Rectangle((w - vs) / 2, P(16), vs, vs), Row = paintRow, Frame = paintFrame, Brush = paintSize, Outline = paintTool != PaintTool.Pick };
         paintView.Down += (px, py) => PaintDown(cat, px, py);
         paintView.Move += (px, py) => PaintMove(cat, px, py);
         paintView.Up += () => PaintUp(cat);
@@ -185,7 +209,7 @@ sealed partial class SettingsForm
             sy = P(40) + P(12);
             SetPlay(paintPlay);
         }
-        paintStrip = new FrameStrip(this, previewSheet!, () => paintCatObj?.Hand) { Bounds = new Rectangle(0, sy, pn.Width, pn.Height - sy), Row = paintRow, Frame = paintFrame, Count = paintFrames![paintRow] };
+        paintStrip = new FrameStrip(this, previewSheet!, () => paintDraft) { Bounds = new Rectangle(0, sy, pn.Width, pn.Height - sy), Row = paintRow, Frame = paintFrame, Count = paintFrames![paintRow] };
         paintStrip.Pick += i => { if (IsAnimated(paintRow)) SetPlay(false); paintFrame = i; ShowFrame(); };
         pn.Controls.Add(paintStrip);
         ShowFrame();
@@ -464,16 +488,13 @@ sealed partial class SettingsForm
                 if (x < 0 || y < 0 || x >= 32 || y >= 32) continue;
                 int sx = paintFrame * 32 + x, sy = paintRow * 32 + y;
                 if (!CatSprite.Paintable(sx, sy)) continue;   // only on the cat itself, never on its outline
-                var hand = paintTool == PaintTool.Eraser ? cat.Hand : HandPaint.Ensure(cat);
-                if (hand == null) continue;
-                int old = hand.GetPixel(sx, sy).ToArgb(), now = paintTool == PaintTool.Eraser ? 0 : Color.FromArgb(255, brushColor).ToArgb();
+                int old = paintDraft!.GetPixel(sx, sy).ToArgb(), now = paintTool == PaintTool.Eraser ? 0 : Color.FromArgb(255, brushColor).ToArgb();
                 if (old == now) continue;
                 stroke!.Add((sx, sy, old, now));
-                hand.SetPixel(sx, sy, Color.FromArgb(now));
+                paintDraft.SetPixel(sx, sy, Color.FromArgb(now));
             }
     }
 
-    // the stroke is done: saving it and telling the pet is deferred a little, so strokes in quick succession never wait for the disk
     void PaintUp(CatProfile cat)
     {
         if (!painting) return;
@@ -483,34 +504,87 @@ sealed partial class SettingsForm
             undo.Add(stroke); redo.Clear(); if (undo.Count > 60) undo.RemoveAt(0);
             paintStrip?.Invalidate();
             if (paintTool == PaintTool.Brush) RememberColor();
-            MarkDirty(cat);
+            SetChanged(true);
         }
         stroke = null;
     }
 
-    void MarkDirty(CatProfile cat)
+    // ---- the drawing is a draft until it is saved --------------------------------------------------
+    // What is painted lives in paintDraft, not in the cat: the pet on the desktop keeps its saved look until "Save".
+    // Leaving the studio with changes asks first, and what was not saved is lost.
+
+    void SetChanged(bool on)
     {
-        paintDirty = cat;
-        if (paintSaveT == null) { paintSaveT = new System.Windows.Forms.Timer { Interval = 600 }; paintSaveT.Tick += (_, _) => FlushPaint(); }
-        paintSaveT.Stop(); paintSaveT.Start();
+        paintChanged = on;
+        if (paintSavePill != null) paintSavePill.Active = on;
     }
 
-    void FlushPaint()
+    void CommitDraft(CatProfile cat)
     {
-        paintSaveT?.Stop();
-        if (paintDirty is not { } c) return;
-        paintDirty = null;
-        HandPaint.Save(c); Cfg.Changed(c);
+        if (paintDraft == null) return;
+        HandPaint.Commit(cat, paintDraft);
+        Cfg.Changed(cat);
+        SetChanged(false);
+    }
+
+    void DropDraft()
+    {
+        paintDraft?.Dispose(); paintDraft = null; paintChanged = false;
+        undo.Clear(); redo.Clear();
+    }
+
+    // Is it all right to leave the studio? (unsaved drawing: save it, drop it, or stay)
+    bool LeaveStudioOk()
+    {
+        if (paintDraft == null || !paintChanged || paintCatObj == null) { DropDraft(); return true; }
+        using var d = new ConfirmDialog(this);
+        var r = d.ShowDialog(this);
+        if (r == DialogResult.Cancel) return false;
+        if (r == DialogResult.Yes) CommitDraft(paintCatObj);
+        DropDraft();
+        return true;
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        base.OnFormClosing(e);
+        if (!e.Cancel && inPaintPage && !LeaveStudioOk()) e.Cancel = true;
+    }
+
+    static int[] PixelsOf(Bitmap b)
+    {
+        var d = b.LockBits(new Rectangle(0, 0, b.Width, b.Height), System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        var px = new int[b.Width * b.Height];
+        Marshal.Copy(d.Scan0, px, 0, px.Length);
+        b.UnlockBits(d);
+        return px;
+    }
+
+    // the whole drawing is replaced by another (an import): one step, which can be undone
+    void ReplaceDraft(Bitmap? other)
+    {
+        var mine = PixelsOf(paintDraft!);
+        var theirs = other != null ? PixelsOf(other) : new int[mine.Length];
+        var s = new List<(int x, int y, int old, int now)>();
+        for (int i = 0; i < mine.Length; i++)
+        {
+            int a = (mine[i] >> 24) == 0 ? 0 : mine[i], b = (theirs[i] >> 24) == 0 ? 0 : theirs[i];
+            if (a == b) continue;
+            s.Add((i % paintDraft!.Width, i / paintDraft.Width, a, b)); paintDraft.SetPixel(i % paintDraft.Width, i / paintDraft.Width, Color.FromArgb(b));
+        }
+        if (s.Count == 0) return;
+        undo.Add(s); redo.Clear();
+        SetChanged(true);
+        paintView?.Invalidate(); paintStrip?.Invalidate();
     }
 
     void Undo(CatProfile cat)
     {
         if (undo.Count == 0) return;
         var s = undo[^1]; undo.RemoveAt(undo.Count - 1);
-        var hand = HandPaint.Ensure(cat);
-        foreach (var (x, y, old, _) in s) hand.SetPixel(x, y, Color.FromArgb(old));
+        foreach (var (x, y, old, _) in s) paintDraft!.SetPixel(x, y, Color.FromArgb(old));
         redo.Add(s);
-        MarkDirty(cat);
+        SetChanged(true);
         paintView?.Invalidate(); paintStrip?.Invalidate();
     }
 
@@ -518,46 +592,112 @@ sealed partial class SettingsForm
     {
         if (redo.Count == 0) return;
         var s = redo[^1]; redo.RemoveAt(redo.Count - 1);
-        var hand = HandPaint.Ensure(cat);
-        foreach (var (x, y, _, now) in s) hand.SetPixel(x, y, Color.FromArgb(now));
+        foreach (var (x, y, _, now) in s) paintDraft!.SetPixel(x, y, Color.FromArgb(now));
         undo.Add(s);
-        MarkDirty(cat);
+        SetChanged(true);
         paintView?.Invalidate(); paintStrip?.Invalidate();
     }
 
-    // everything painted by hand goes, in one step that can be undone (no "are you sure": undo is the safety net)
-    void ClearAll(CatProfile cat)
-    {
-        if (cat.Hand == null) return;
-        var s = new List<(int x, int y, int old, int now)>();
-        for (int y = 0; y < cat.Hand.Height; y++)
-            for (int x = 0; x < cat.Hand.Width; x++)
-            {
-                int old = cat.Hand.GetPixel(x, y).ToArgb();
-                if (old == 0) continue;
-                s.Add((x, y, old, 0)); cat.Hand.SetPixel(x, y, Color.Transparent);
-            }
-        if (s.Count == 0) return;
-        undo.Add(s); redo.Clear();
-        MarkDirty(cat);
-        paintView?.Invalidate(); paintStrip?.Invalidate();
-    }
+    // everything painted goes, in one step that can be undone (no "are you sure": undo is the safety net)
+    void ClearAll(CatProfile cat) => ReplaceDraft(null);
 
     void ClearFrame(CatProfile cat)
     {
-        if (cat.Hand == null) return;
         var s = new List<(int x, int y, int old, int now)>();
         for (int y = 0; y < 32; y++)
             for (int x = 0; x < 32; x++)
             {
-                int sx = paintFrame * 32 + x, sy = paintRow * 32 + y, old = cat.Hand.GetPixel(sx, sy).ToArgb();
+                int sx = paintFrame * 32 + x, sy = paintRow * 32 + y, old = paintDraft!.GetPixel(sx, sy).ToArgb();
                 if (old == 0) continue;
-                s.Add((sx, sy, old, 0)); cat.Hand.SetPixel(sx, sy, Color.Transparent);
+                s.Add((sx, sy, old, 0)); paintDraft.SetPixel(sx, sy, Color.Transparent);
             }
         if (s.Count == 0) return;
         undo.Add(s); redo.Clear();
-        MarkDirty(cat);
+        SetChanged(true);
         paintView?.Invalidate(); paintStrip?.Invalidate();
+    }
+
+    // ---- sharing -----------------------------------------------------------------------------------
+
+    void ShowStatus(string msg)
+    {
+        paintStatusText = msg;
+        if (paintStatusLbl != null) paintStatusLbl.Text = msg;
+        paintStatusT ??= new System.Windows.Forms.Timer { Interval = 5000 };
+        paintStatusT.Tick -= ClearStatus; paintStatusT.Tick += ClearStatus;
+        paintStatusT.Stop(); paintStatusT.Start();
+    }
+
+    void ClearStatus(object? s, EventArgs e)
+    {
+        paintStatusT?.Stop(); paintStatusText = "";
+        if (paintStatusLbl != null) paintStatusLbl.Text = "";
+    }
+
+    void ShareMenu(CatProfile cat, Control anchor)
+    {
+        var m = new ContextMenuStrip();
+        m.Items.Add(new ToolStripMenuItem(Str.T("share.copy"), null, (_, _) => CopyCode(cat)));
+        m.Items.Add(new ToolStripMenuItem(Str.T("share.image"), null, (_, _) => SaveImage(cat)));
+        m.Items.Add(new ToolStripSeparator());
+        m.Items.Add(new ToolStripMenuItem(Str.T("share.paste"), null, (_, _) => ImportShared(cat, LookShare.Decode(SafeClipboardText()))));
+        m.Items.Add(new ToolStripMenuItem(Str.T("share.file"), null, (_, _) =>
+        {
+            using var d = new OpenFileDialog { Filter = "Tam-a-Pet|*.png;*.txt|*.*|*.*" };
+            if (d.ShowDialog(this) == DialogResult.OK) ImportShared(cat, LookShare.DecodeFile(d.FileName));
+        }));
+        MenuRenderer.Apply(m);
+        m.Show(anchor, new Point(0, anchor.Height + P(4)));
+    }
+
+    static string SafeClipboardText() { try { return Clipboard.ContainsText() ? Clipboard.GetText() : ""; } catch { return ""; } }
+
+    string ShareName(CatProfile cat) => cat.Name != "" ? cat.Name : "";
+
+    // the code for a message: with the drawing if it fits in one, otherwise the look alone
+    void CopyCode(CatProfile cat)
+    {
+        bool hasArt = paintDraft != null && PixelsOf(paintDraft).Any(p => (p >> 24) != 0);
+        var code = LookShare.Encode(ShareName(cat), cat, hasArt ? paintDraft : null);
+        bool dropped = false;
+        if (code.Length > LookShare.MaxMessage) { code = LookShare.Encode(ShareName(cat), cat, null); dropped = true; }
+        try { Clipboard.SetText(code); ShowStatus(Str.T(dropped ? "share.copied.nodraw" : "share.copied")); }
+        catch { ShowStatus(Str.T("share.failed")); }
+    }
+
+    void SaveImage(CatProfile cat)
+    {
+        using var d = new SaveFileDialog { Filter = "PNG|*.png", FileName = "tamapet-" + (cat.Name != "" ? string.Concat(cat.Name.Split(Path.GetInvalidFileNameChars())) : "cat") + ".png" };
+        if (d.ShowDialog(this) != DialogResult.OK) return;
+        bool hasArt = paintDraft != null && PixelsOf(paintDraft).Any(p => (p >> 24) != 0);
+        try { File.WriteAllBytes(d.FileName, LookShare.MakeImage(ShareName(cat), cat, hasArt ? paintDraft : null)); ShowStatus(Str.T("share.saved")); }
+        catch { ShowStatus(Str.T("share.failed")); }
+    }
+
+    // what someone sent: its colours are the cat's now; its drawing goes into the draft (Save keeps it, Undo takes it back)
+    void ImportShared(CatProfile cat, LookShare.Shared? s)
+    {
+        if (s == null) { ShowStatus(Str.T("share.invalid")); return; }
+        s.Look.Apply(cat);
+        Cfg.Changed(cat);
+        ReplaceDraft(s.Hand);
+        s.Hand?.Dispose();
+        ShowStatus(Str.T("share.imported"));
+        Build();
+    }
+
+    bool dropSet;
+    void EnableDrop(CatProfile cat)
+    {
+        if (dropSet) return;
+        dropSet = true;
+        AllowDrop = true;
+        DragEnter += (_, e) => { if (inPaintPage && e.Data?.GetDataPresent(DataFormats.FileDrop) == true) e.Effect = DragDropEffects.Copy; };
+        DragDrop += (_, e) =>
+        {
+            if (!inPaintPage || paintCatObj == null || e.Data?.GetData(DataFormats.FileDrop) is not string[] files || files.Length == 0) return;
+            ImportShared(paintCatObj, LookShare.DecodeFile(files[0]));
+        };
     }
 
     // ---- pattern (also used by the cat's own page) ------------------------------------------------------
@@ -951,6 +1091,42 @@ sealed partial class SettingsForm
             var (cell, cols, gap) = Geometry();
             int cx = e.X / (cell + gap), cy = e.Y / (cell + gap), i = cy * cols + cx;
             if (cx < cols && i < Count && e.X % (cell + gap) < cell && e.Y % (cell + gap) < cell) Pick?.Invoke(i);
+        }
+    }
+
+    // the unsaved drawing is about to be lost: save it, throw it away, or stay (Yes / No / Cancel)
+    sealed class ConfirmDialog : Form
+    {
+        readonly SettingsForm f;
+
+        public ConfirmDialog(SettingsForm owner)
+        {
+            f = owner;
+            Text = Str.T("paint.leave.title"); Font = f.fBase; BackColor = f.bg; Icon = f.appIcon;
+            FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+            StartPosition = FormStartPosition.CenterParent;
+            ClientSize = new Size(f.P(400), f.P(214));
+            var t = f.Lbl(Str.T("paint.leave.title"), f.fBold, f.text, f.P(20), f.P(18), f.P(360)); t.BackColor = f.bg; Controls.Add(t);
+            var m = f.Lbl(Str.T("paint.leave.msg"), f.fBase, f.muted, f.P(20), f.P(46), f.P(360)); m.BackColor = f.bg; Controls.Add(m);
+            var save = new Pill(f) { Text = Str.T("paint.leave.save"), Kind = PillKind.Seg, Active = true, Bounds = new Rectangle(f.P(20), f.P(114), f.P(360), f.P(40)) };
+            var drop = new Pill(f) { Text = Str.T("paint.leave.discard"), Kind = PillKind.Outline, Bounds = new Rectangle(f.P(20), f.P(162), f.P(176), f.P(40)) };
+            var stay = new Pill(f) { Text = Str.T("paint.leave.stay"), Kind = PillKind.Outline, Bounds = new Rectangle(f.P(204), f.P(162), f.P(176), f.P(40)) };
+            save.Click += (_, _) => DialogResult = DialogResult.Yes;
+            drop.Click += (_, _) => DialogResult = DialogResult.No;
+            stay.Click += (_, _) => DialogResult = DialogResult.Cancel;
+            Controls.Add(save); Controls.Add(drop); Controls.Add(stay);
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys key)
+        {
+            if (key == Keys.Escape) { DialogResult = DialogResult.Cancel; return true; }
+            return base.ProcessCmdKey(ref msg, key);
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            if (f.bg.GetBrightness() < 0.5f) { int on = 1; DwmSetWindowAttribute(Handle, 20, ref on, 4); }
         }
     }
 

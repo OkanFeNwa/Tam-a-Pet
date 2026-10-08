@@ -53,6 +53,19 @@ static class HandPaint
         catch { }
     }
 
+    // the draft becomes the cat's painting (nothing painted: no layer, no file)
+    public static void Commit(CatProfile p, Bitmap draft)
+    {
+        p.Hand?.Dispose(); p.Hand = null;
+        if (!IsEmpty(draft))
+        {
+            var b = new Bitmap(W, H, PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(b)) { g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy; g.DrawImage(draft, 0, 0, W, H); }
+            p.Hand = b;
+        }
+        Save(p);
+    }
+
     public static void Clear(CatProfile p)
     {
         p.Hand?.Dispose(); p.Hand = null;

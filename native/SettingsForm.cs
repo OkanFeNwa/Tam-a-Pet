@@ -118,6 +118,8 @@ sealed partial class SettingsForm : Form
     {
         base.OnShown(e);
         Build();
+        if (Environment.GetCommandLineArgs().Contains("--studio-leave"))   // testing: leave the studio with an unsaved drawing, to see the question
+            BeginInvoke(new Action(() => { paintChanged = true; GoTo("pets"); }));
         if (Environment.GetCommandLineArgs().Contains("--picker"))   // testing: open the colour picker right away
             BeginInvoke(new Action(() => { using var d = new ColorPicker(this, Cfg.Cats[0].Fur1); d.ShowDialog(this); }));
     }
@@ -138,7 +140,7 @@ sealed partial class SettingsForm : Form
             previewSheet?.Dispose();
             foreach (var pv in objPreviews) pv.Dispose();
             statsT?.Dispose(); scrollT?.Dispose(); paintT?.Dispose();
-            FlushPaint(); paintSaveT?.Dispose(); paintTip?.Dispose();
+            DropDraft(); paintStatusT?.Dispose(); paintTip?.Dispose();
             fBase.Dispose(); fBold.Dispose(); fTitle.Dispose(); fSmall.Dispose(); fBrand.Dispose(); fIcon.Dispose(); appIcon.Dispose();
         }
         base.Dispose(disposing);
@@ -186,6 +188,7 @@ sealed partial class SettingsForm : Form
     // Rebuilding destroys and recreates every control: stop painting meanwhile, so the window doesn't flicker
     void Build()
     {
+        if (inPaintPage && !page.StartsWith("paint") && !LeaveStudioOk()) page = paintPageName;   // unsaved drawing: asked first, and "stay" keeps the studio
         const int WM_SETREDRAW = 0x000B;
         bool live = IsHandleCreated && view.IsHandleCreated && side.IsHandleCreated;
         if (live) { SendMessage(view.Handle, WM_SETREDRAW, 0, 0); SendMessage(side.Handle, WM_SETREDRAW, 0, 0); }
@@ -209,7 +212,6 @@ sealed partial class SettingsForm : Form
         objPreviews.Clear();
         statsT?.Dispose(); statsT = null;
         paintT?.Dispose(); paintT = null;
-        FlushPaint();
         SyncPaintWindow();
         int keepScroll = bar.Value;
 
@@ -844,7 +846,7 @@ sealed partial class SettingsForm : Form
         {
             var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
             // behind the pill: what it sits on (a card, which may itself be lit by the pointer), so no corner of another colour shows
-            Color parentBg = Kind == PillKind.Nav ? f.sideBg : Parent is Card pc ? pc.CurrentFill : Kind == PillKind.Outline ? f.bg : f.card;
+            Color parentBg = Kind == PillKind.Nav ? f.sideBg : Parent is Card pc ? pc.CurrentFill : Parent is { BackColor.A: 255 } ? Parent.BackColor : Kind == PillKind.Outline ? f.bg : f.card;
             g.Clear(parentBg);
             var r = pressed ? new Rectangle(f.P(1), f.P(1), Width - 1 - f.P(2), Height - 1 - f.P(2)) : new Rectangle(0, 0, Width - 1, Height - 1);   // pressed: it sinks a little
             double a = Math.Clamp(act.Value, 0, 1), h = Math.Clamp(hov.Value, 0, 1);
