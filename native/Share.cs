@@ -24,6 +24,15 @@ static class LookShare
     }
 
     static string Clean(string s) { s = Regex.Replace(s ?? "", @"[\p{C}]", " ").Trim(); return s.Length > 24 ? s[..24] : s; }
+    static readonly byte[] PngSignature = { 0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A };
+
+    static bool IsPngOfSheetSize(byte[] b)
+    {
+        if (b.Length < 33) return false;
+        for (int i = 0; i < 8; i++) if (b[i] != PngSignature[i]) return false;
+        return ReadInt(b, 8) == 13 && b[12] == 'I' && b[13] == 'H' && b[14] == 'D' && b[15] == 'R' && ReadInt(b, 16) == HandPaint.W && ReadInt(b, 20) == HandPaint.H;
+    }
+
     static string B64(byte[] b) => Convert.ToBase64String(b).TrimEnd('=').Replace('+', '-').Replace('/', '_');
     static byte[] UnB64(string s) { s = s.Replace('-', '+').Replace('_', '/'); return Convert.FromBase64String(s + new string('=', (4 - s.Length % 4) % 4)); }
 
@@ -42,6 +51,11 @@ static class LookShare
         if (look.Light is Color li) d["li"] = CatSprite.Hex(li);
         if (look.Outline is Color ou) d["ou"] = CatSprite.Hex(ou);
         if (hand != null) d["h"] = Convert.ToBase64String(Png(hand));
+        return Pack(d);
+    }
+
+    static string Pack(Dictionary<string, string> d)
+    {
         using var ms = new MemoryStream();
         using (var z = new DeflateStream(ms, CompressionLevel.Optimal, true)) z.Write(JsonSerializer.SerializeToUtf8Bytes(d));
         return Prefix + B64(ms.ToArray());
@@ -73,10 +87,12 @@ static class LookShare
             if (d.TryGetValue("h", out var h) && h.Length < 2_000_000)
             {
                 var png = Convert.FromBase64String(h);
-                // the size is in the header: read it before decoding, so a huge picture is never opened
-                if (png.Length > 24 && ReadInt(png, 16) == HandPaint.W && ReadInt(png, 20) == HandPaint.H)
+                // only a real PNG of exactly the size of the sheet is ever opened: the signature and the header chunk are checked first
+                // (GDI+ would decode any format it recognises by content, so the size read from the bytes means nothing otherwise)
+                if (IsPngOfSheetSize(png))
                 {
                     using var src = new Bitmap(new MemoryStream(png));
+                    if (src.RawFormat.Guid != ImageFormat.Png.Guid || src.Width != HandPaint.W || src.Height != HandPaint.H) return null;
                     var bmp = new Bitmap(HandPaint.W, HandPaint.H, PixelFormat.Format32bppArgb);
                     using (var g = Graphics.FromImage(bmp)) { g.CompositingMode = CompositingMode.SourceCopy; g.DrawImage(src, 0, 0, HandPaint.W, HandPaint.H); }
                     shared.Hand = bmp;
@@ -228,6 +244,14 @@ static class LookShare
         File.Delete(file);
         if (fromPic == null || fromPic.Look.Fur1 != cat.Fur1 || fromPic.Hand == null) { Console.Error.WriteLine("picture round trip failed"); return false; }
         if (Decode("tamapet:AAAAAAAAAAAA") != null || Decode("nothing here") != null) { Console.Error.WriteLine("garbage accepted"); return false; }
+        // a BMP of the right size is not a PNG: refused (its bytes 16-23 must not be taken for a PNG header)
+        using (var bmpSrc = new Bitmap(HandPaint.W, HandPaint.H, PixelFormat.Format32bppArgb))
+        using (var ms = new MemoryStream())
+        {
+            bmpSrc.Save(ms, ImageFormat.Bmp);
+            var hostile = Pack(new Dictionary<string, string> { ["f"] = "112233", ["h"] = Convert.ToBase64String(ms.ToArray()) });
+            if (Decode(hostile)?.Hand != null) { Console.Error.WriteLine("a non-PNG picture was opened"); return false; }
+        }
         using var tiny = new Bitmap(10, 10);
         if (Decode(Encode("x", cat, tiny))?.Hand != null) { Console.Error.WriteLine("wrong size accepted"); return false; }
         return true;
