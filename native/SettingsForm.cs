@@ -793,6 +793,7 @@ sealed partial class SettingsForm : Form
         readonly SettingsForm f;
         bool hover, pressed;
         public bool Active;
+        public int Dot;   // a filled square of this size (logical pixels) instead of text: shows a size
         public string Glyph = "";   // an icon of the system's icon font, drawn before the text (alone when there is no text)
         public PillKind Kind;
         public Pill(SettingsForm owner)
@@ -827,6 +828,14 @@ sealed partial class SettingsForm : Form
             }
             if (Kind == PillKind.Nav && Active)
                 using (var b = new SolidBrush(f.accent)) g.FillPath(b, RoundRect(new Rectangle(f.P(4), Height / 2 - f.P(9), f.P(3), f.P(18)), f.P(1)));
+            if (Dot > 0)
+            {
+                int d = f.P(Dot);
+                using var path = RoundRect(new Rectangle((Width - d) / 2, (Height - d) / 2, d, d), f.P(2));
+                using var b = new SolidBrush(fore);
+                g.FillPath(b, path);
+                return;
+            }
             if (Glyph != "")
             {
                 const TextFormatFlags nf = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter;
