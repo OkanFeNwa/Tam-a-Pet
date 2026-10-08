@@ -64,16 +64,24 @@ static class HandPaint
     {
         Cfg.ClassicSprites = false;
         var p = new CatProfile(0);
-        int sx = -1, sy = -1;
-        for (int y = 0; y < 32 && sx < 0; y++) for (int x = 0; x < 32; x++) if (CatSprite.Solid(x, y)) { sx = x; sy = y; break; }
+        CatSprite.BuildSheet(p).Dispose();   // finds the eyes, which Paintable needs
+        int sx = -1, sy = -1, ox = -1, oy = -1;
+        for (int y = 0; y < 32; y++)
+            for (int x = 0; x < 32; x++)
+            {
+                if (sx < 0 && CatSprite.Paintable(x, y)) { sx = x; sy = y; }
+                if (ox < 0 && CatSprite.Solid(x, y) && !CatSprite.Paintable(x, y)) { ox = x; oy = y; }
+            }
+        if (sx < 0 || ox < 0) { Console.Error.WriteLine("no paintable / outline pixel found"); return false; }
         var red = Color.FromArgb(255, 250, 10, 20);
         Ensure(p).SetPixel(sx, sy, red);
         p.Hand!.SetPixel(0, 0, red);   // on a transparent pixel: must not show
-        using (var s = CatSprite.BuildSheet(p)) if (s.GetPixel(sx, sy).ToArgb() != red.ToArgb() || s.GetPixel(0, 0).A != 0) { Console.Error.WriteLine("paint not applied right"); return false; }
+        p.Hand.SetPixel(ox, oy, red);   // on the outline: must not show either
+        using (var s = CatSprite.BuildSheet(p)) if (s.GetPixel(sx, sy).ToArgb() != red.ToArgb() || s.GetPixel(0, 0).A != 0 || s.GetPixel(ox, oy).ToArgb() == red.ToArgb()) { Console.Error.WriteLine("paint not applied right"); return false; }
         using (var s = CatSprite.BuildSheet(p, false)) if (s.GetPixel(sx, sy).ToArgb() == red.ToArgb()) { Console.Error.WriteLine("hand=false still painted"); return false; }
         Save(p); p.Hand!.Dispose(); p.Hand = null; Load(p);
         if (p.Hand == null || p.Hand.GetPixel(sx, sy).ToArgb() != red.ToArgb()) { Console.Error.WriteLine("save/load failed"); return false; }
-        p.Hand.SetPixel(sx, sy, Color.Transparent); p.Hand.SetPixel(0, 0, Color.Transparent);
+        p.Hand.SetPixel(sx, sy, Color.Transparent); p.Hand.SetPixel(0, 0, Color.Transparent); p.Hand.SetPixel(ox, oy, Color.Transparent);
         Save(p);
         if (p.Hand != null || File.Exists(PathOf(p))) { Console.Error.WriteLine("empty layer kept"); return false; }
         return true;

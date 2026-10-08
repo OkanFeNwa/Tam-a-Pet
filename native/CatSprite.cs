@@ -88,6 +88,17 @@ static class CatSprite
         rawW = b.Width; rawH = b.Height; rawStride = d.Stride; rawBuf = buf;
     }
 
+    public static HashSet<(int, int)>? LastEyes;   // the eye pixels found by the last BuildNew: they are dark like the outline but are not part of it
+
+    // where the owner may paint by hand: the cat's own pixels, except its outline (the eyes are dark too, but they are free)
+    public static bool Paintable(int px, int py)
+    {
+        if (!Solid(px, py)) return false;
+        int i = py * rawStride + px * 4;
+        bool outline = rawBuf![i + 2] == 18 && rawBuf[i + 1] == 14 && rawBuf[i] == 20;
+        return !outline || LastEyes?.Contains((px, py)) == true;
+    }
+
     public static bool Solid(int px, int py)
     {
         EnsureRaw();
@@ -193,6 +204,7 @@ static class CatSprite
             return false;
         }
 
+        LastEyes = eyePx;
         Color fur = p.Fur1, third = p.Fur3, white = Color.FromArgb(240, 240, 240);
         void Put(int i, Color c) { buf[i] = c.B; buf[i + 1] = c.G; buf[i + 2] = c.R; }
         for (int y = 0; y < H; y++)
@@ -232,7 +244,7 @@ static class CatSprite
                 for (int x = 0; x < W; x++)
                 {
                     int i = y * stride + x * 4, j = y * hd.Stride + x * 4;
-                    if (hbuf[j + 3] == 0 || orig[i + 3] == 0) continue;
+                    if (hbuf[j + 3] == 0 || orig[i + 3] == 0 || IsOut(x, y) && !eyePx.Contains((x, y))) continue;   // never over the outline
                     buf[i] = hbuf[j]; buf[i + 1] = hbuf[j + 1]; buf[i + 2] = hbuf[j + 2];
                 }
         }

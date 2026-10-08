@@ -84,7 +84,7 @@ sealed partial class SettingsForm
         int iw = rw - P(32);
         var tc = AddCard(rx, y, rw);
         int cy = P(16);
-        var tools = new (PaintTool t, string glyph, string key)[] { (PaintTool.Brush, "", "tool.brush"), (PaintTool.Eraser, "", "tool.eraser"), (PaintTool.Pick, "", "tool.pick") };
+        var tools = new (PaintTool t, string glyph, string key)[] { (PaintTool.Brush, "", "tool.brush"), (PaintTool.Eraser, "", "tool.eraser"), (PaintTool.Pick, "", "tool.pick") };
         int tw = (iw - P(8) * 2) / 3;
         for (int i = 0; i < tools.Length; i++)
         {
@@ -380,7 +380,7 @@ sealed partial class SettingsForm
                 int x = cx - off + i, y = cy - off + j;
                 if (x < 0 || y < 0 || x >= 32 || y >= 32) continue;
                 int sx = paintFrame * 32 + x, sy = paintRow * 32 + y;
-                if (!CatSprite.Solid(sx, sy)) continue;   // only on the cat itself
+                if (!CatSprite.Paintable(sx, sy)) continue;   // only on the cat itself, never on its outline
                 var hand = paintTool == PaintTool.Eraser ? cat.Hand : HandPaint.Ensure(cat);
                 if (hand == null) continue;
                 int old = hand.GetPixel(sx, sy).ToArgb(), now = paintTool == PaintTool.Eraser ? 0 : Color.FromArgb(255, brushColor).ToArgb();
