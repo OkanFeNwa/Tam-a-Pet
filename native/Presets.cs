@@ -6,7 +6,7 @@ sealed class LookPreset
 {
     public string Name = "", Key = "";   // Key != "": a built-in template (its name is translated)
     public Color Fur1, Ears = CatSprite.DefaultEars, Nose = CatSprite.DefaultNose, Eyes, Fur3 = Color.FromArgb(0xE8, 0x91, 0x3C);
-    public Color? Shade, Light, Outline;
+    public Color? Shade, Light, Outline, Eyes2;
     public string Pattern = "none", Accessory = "";
 
     public bool Builtin => Key != "";
@@ -14,13 +14,13 @@ sealed class LookPreset
 
     public static LookPreset From(CatProfile p, string name) => new()
     {
-        Name = name, Fur1 = p.Fur1, Shade = p.Shade, Light = p.Light, Outline = p.Outline, Ears = p.Ears, Nose = p.Nose, Eyes = p.Eyes,
+        Name = name, Fur1 = p.Fur1, Shade = p.Shade, Light = p.Light, Outline = p.Outline, Ears = p.Ears, Nose = p.Nose, Eyes = p.Eyes, Eyes2 = p.Eyes2,
         Fur3 = p.Fur3, Pattern = p.Pattern, Accessory = p.Accessory
     };
 
     public void Apply(CatProfile p)
     {
-        p.Fur1 = Fur1; p.Shade = Shade; p.Light = Light; p.Outline = Outline; p.Ears = Ears; p.Nose = Nose; p.Eyes = Eyes;
+        p.Fur1 = Fur1; p.Shade = Shade; p.Light = Light; p.Outline = Outline; p.Ears = Ears; p.Nose = Nose; p.Eyes = Eyes; p.Eyes2 = Eyes2;
         p.Fur3 = Fur3; p.Pattern = Pattern; p.Accessory = Accessory;
     }
 
@@ -32,7 +32,7 @@ sealed class LookPreset
     public string ToLine()
     {
         string H(Color? c) => c is Color v ? CatSprite.Hex(v) : "-";
-        return string.Join("\t", Name.Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' '), H(Fur1), H(Shade), H(Light), H(Outline), H(Ears), H(Nose), H(Eyes), H(Fur3), Pattern, Accessory);
+        return string.Join("\t", Name.Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' '), H(Fur1), H(Shade), H(Light), H(Outline), H(Ears), H(Nose), H(Eyes), H(Fur3), Pattern, Accessory, H(Eyes2));
     }
 
     public static LookPreset? Parse(string line)
@@ -43,7 +43,7 @@ sealed class LookPreset
         var p = new LookPreset { Name = f[0] };
         if (C(f[1]) is not Color fur) return null;
         p.Fur1 = fur; p.Shade = C(f[2]); p.Light = C(f[3]); p.Outline = C(f[4]);
-        p.Ears = C(f[5]) ?? p.Ears; p.Nose = C(f[6]) ?? p.Nose; p.Eyes = C(f[7]) ?? CatSprite.DefaultEyes; p.Fur3 = C(f[8]) ?? p.Fur3;
+        p.Ears = C(f[5]) ?? p.Ears; p.Nose = C(f[6]) ?? p.Nose; p.Eyes = C(f[7]) ?? CatSprite.DefaultEyes; p.Fur3 = C(f[8]) ?? p.Fur3; if (f.Length > 11) p.Eyes2 = C(f[11]);
         p.Pattern = f[9] is "tabby" or "patches" or "calico" ? f[9] : "none";
         p.Accessory = CatSprite.Accessories.Contains(f[10]) ? f[10] : "";
         return p;

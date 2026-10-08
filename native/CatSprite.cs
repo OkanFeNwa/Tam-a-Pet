@@ -189,14 +189,20 @@ static class CatSprite
                 if (!cands.TryGetValue(cell, out var cl)) cands[cell] = cl = new();
                 cl.Add((ddx * ddx + ddy * ddy, comp));
             }
+        var eyeRight = new HashSet<(int, int)>();   // with two eyes in a picture, the one on the right of it (heterochromia gives it its own colour)
         foreach (var (cell, cl) in cands)   // a cat has two eyes: of the groups near the nose, the two closest
-            foreach (var (_, comp) in cl.OrderBy(t => t.d).Take(2))
+        {
+            var two = cl.OrderBy(t => t.d).Take(2).Select(t => t.comp).ToList();
+            var rightComp = two.Count == 2 ? two.OrderBy(q => q.Average(e => e.x)).Last() : null;
+            foreach (var comp in two)
                 foreach (var (ex, ey) in comp)
                 {
                     eyePx.Add((ex, ey));
+                    if (comp == rightComp) eyeRight.Add((ex, ey));
                     if (!eyeByCell.TryGetValue(cell, out var l)) eyeByCell[cell] = l = new();
                     l.Add((ex % 32, ey % 32));
                 }
+        }
         bool NearHead(int row, int col, int fx, int fy)
         {
             if (!eyeByCell.TryGetValue((row, col), out var l)) return false;
@@ -212,7 +218,7 @@ static class CatSprite
             {
                 int i = y * stride + x * 4;
                 if (orig[i + 3] == 0) continue;
-                if (eyePx.Contains((x, y))) { Put(i, p.Eyes); continue; }
+                if (eyePx.Contains((x, y))) { Put(i, eyeRight.Contains((x, y)) && p.Eyes2 is Color e2 ? e2 : p.Eyes); continue; }
                 byte b = orig[i], g = orig[i + 1], r = orig[i + 2];
                 if (r == 202 && g == 113 && b == 159) { Put(i, p.Nose); continue; }   // the nose
                 if (r == 154 && g == 135 && b == 126) { Put(i, p.Ears); continue; }   // inside the ears

@@ -37,6 +37,7 @@ static class LookShare
             ["n"] = Clean(name), ["f"] = CatSprite.Hex(look.Fur1), ["ea"] = CatSprite.Hex(look.Ears), ["no"] = CatSprite.Hex(look.Nose),
             ["ey"] = CatSprite.Hex(look.Eyes), ["f3"] = CatSprite.Hex(look.Fur3), ["p"] = look.Pattern, ["a"] = look.Accessory,
         };
+        if (look.Eyes2 is Color e2) d["e2"] = CatSprite.Hex(e2);
         if (look.Shade is Color sh) d["sh"] = CatSprite.Hex(sh);
         if (look.Light is Color li) d["li"] = CatSprite.Hex(li);
         if (look.Outline is Color ou) d["ou"] = CatSprite.Hex(ou);
@@ -63,7 +64,7 @@ static class LookShare
             Color? C(string k) => d.TryGetValue(k, out var v) && CatSprite.TryParse(v, out var c) ? c : null;
             var look = new LookPreset
             {
-                Fur1 = fur, Shade = C("sh"), Light = C("li"), Outline = C("ou"),
+                Fur1 = fur, Eyes2 = C("e2"), Shade = C("sh"), Light = C("li"), Outline = C("ou"),
                 Ears = C("ea") ?? CatSprite.DefaultEars, Nose = C("no") ?? CatSprite.DefaultNose, Eyes = C("ey") ?? CatSprite.DefaultEyes, Fur3 = C("f3") ?? Color.FromArgb(0xE8, 0x91, 0x3C),
                 Pattern = d.GetValueOrDefault("p", "none") is "tabby" or "patches" or "calico" ? d["p"] : "none",
                 Accessory = CatSprite.Accessories.Contains(d.GetValueOrDefault("a", "")) ? d["a"] : "",
@@ -137,6 +138,7 @@ static class LookShare
 
             // the colours, as little squares
             var chips = new List<Color> { look.Fur1, look.Shade ?? CatSprite.Shade(look.Fur1), look.Light ?? CatSprite.Light(look.Fur1), look.Eyes, look.Nose, look.Ears };
+            if (look.Eyes2 is Color eye2) chips.Insert(4, eye2);
             if (look.Pattern != "none") chips.Add(look.Fur3);
             for (int i = 0; i < chips.Count; i++)
             {
@@ -213,11 +215,11 @@ static class LookShare
     public static bool SelfCheck()
     {
         Cfg.ClassicSprites = false;
-        var cat = new CatProfile(0) { Fur1 = Color.FromArgb(255, 10, 20, 30), Pattern = "tabby", Accessory = "halo", Outline = Color.FromArgb(255, 1, 2, 3) };
+        var cat = new CatProfile(0) { Fur1 = Color.FromArgb(255, 10, 20, 30), Pattern = "tabby", Accessory = "halo", Eyes2 = Color.FromArgb(255, 9, 8, 7), Outline = Color.FromArgb(255, 1, 2, 3) };
         using var hand = new Bitmap(HandPaint.W, HandPaint.H, PixelFormat.Format32bppArgb);
         hand.SetPixel(5, 6, Color.FromArgb(255, 250, 10, 20));
         var back = Decode("hello " + Encode("Mia", cat, hand) + " bye");
-        if (back == null || back.Name != "Mia" || back.Look.Pattern != "tabby" || back.Look.Accessory != "halo" || back.Look.Outline != Color.FromArgb(255, 1, 2, 3) || back.Hand == null || back.Hand.GetPixel(5, 6).ToArgb() != Color.FromArgb(255, 250, 10, 20).ToArgb()) { Console.Error.WriteLine("code round trip failed"); return false; }
+        if (back == null || back.Name != "Mia" || back.Look.Pattern != "tabby" || back.Look.Accessory != "halo" || back.Look.Eyes2 != Color.FromArgb(255, 9, 8, 7) || back.Look.Outline != Color.FromArgb(255, 1, 2, 3) || back.Hand == null || back.Hand.GetPixel(5, 6).ToArgb() != Color.FromArgb(255, 250, 10, 20).ToArgb()) { Console.Error.WriteLine("code round trip failed"); return false; }
         if (Encode("x", cat, null).Length > 400) { Console.Error.WriteLine("code of a plain look too long"); return false; }
         var file = Path.Combine(Path.GetTempPath(), "tamapet-check.png");
         File.WriteAllBytes(file, MakeImage("Mia", cat, hand));

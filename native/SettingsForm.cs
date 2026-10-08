@@ -561,7 +561,20 @@ sealed partial class SettingsForm : Form
             ry = ColorRow(lc, Str.T(Cfg.ClassicSprites ? "look.fur1" : "look.fur"), cat.Fur1, FurPresets, c => { cat.Fur1 = c; Cfg.Changed(cat); }, rx, ry, rw);
             if (Cfg.ClassicSprites) ry = ColorRow(lc, Str.T("look.fur2"), cat.Fur2, FurPresets, c => { cat.Fur2 = c; Cfg.Changed(cat); }, rx, ry, rw);   // the new cat has one fur colour (its shades are derived)
             if (cat.Pattern != "none") ry = ColorRow(lc, Str.T("look.fur3"), cat.Fur3, FurPresets, c => { cat.Fur3 = c; Cfg.Changed(cat); }, rx, ry, rw);
-            ry = ColorRow(lc, Str.T("look.eyes"), cat.Eyes, EyePresets, c => { cat.Eyes = c; Cfg.Changed(cat); }, rx, ry, rw);
+            if (!Cfg.ClassicSprites && cat.Eyes2 is Color eyeR)   // heterochromia: one colour for each eye
+            {
+                ry = ColorRow(lc, Str.T("look.eyeL"), cat.Eyes, EyePresets, c => { cat.Eyes = c; Cfg.Changed(cat); }, rx, ry, rw);
+                ry = ColorRow(lc, Str.T("look.eyeR"), eyeR, EyePresets, c => { cat.Eyes2 = c; Cfg.Changed(cat); }, rx, ry, rw);
+            }
+            else ry = ColorRow(lc, Str.T("look.eyes"), cat.Eyes, EyePresets, c => { cat.Eyes = c; Cfg.Changed(cat); }, rx, ry, rw);
+            if (!Cfg.ClassicSprites)
+            {
+                var hl = Lbl(Str.T("hetero.label"), fBold, text, rx, ry + P(4), rw - P(56)); hl.BackColor = card; lc.Controls.Add(hl);
+                var ht = new Toggle(this) { On = cat.Eyes2 != null, Bounds = new Rectangle(rx + rw - P(44), ry + P(2), P(44), P(24)) };
+                ht.Changed += () => { cat.Eyes2 = ht.On ? cat.Eyes : null; Cfg.Changed(cat); Build(); };
+                lc.Controls.Add(ht);
+                ry += P(38);
+            }
             if (!Cfg.ClassicSprites)
             {
                 ry = ColorRow(lc, Str.T("look.nose"), cat.Nose, NosePresets, c => { cat.Nose = c; Cfg.Changed(cat); }, rx, ry, rw);

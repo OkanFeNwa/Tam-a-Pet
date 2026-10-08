@@ -289,7 +289,26 @@ sealed partial class SettingsForm
             vc.Controls.Add(pp);
         }
         cy += P(46) * 2 + P(6);
-        var reset = new Pill(this) { Text = Str.T("look.reset"), Kind = PillKind.Seg, Bounds = new Rectangle(P(16), cy, iw, P(38)) };
+        // the eyes: one swatch each (heterochromia: give the right one another colour; the same colour again makes them equal)
+        int ew = P(44), eg = P(8);
+        var eyeL = new Swatch(this) { Fill = cat.Eyes, Bounds = new Rectangle(P(16), cy, ew, P(38)) };
+        var eyeR = new Swatch(this) { Fill = cat.Eyes2 ?? cat.Eyes, Selected = cat.Eyes2 != null, Bounds = new Rectangle(P(16) + ew + eg, cy, ew, P(38)) };
+        eyeL.Click += (_, _) =>
+        {
+            using var dlg = new ColorPicker(this, cat.Eyes);
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+            Cfg.AddRecent(dlg.Result); cat.Eyes = dlg.Result; Cfg.Changed(cat); Build();
+        };
+        eyeR.Click += (_, _) =>
+        {
+            using var dlg = new ColorPicker(this, cat.Eyes2 ?? cat.Eyes);
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+            Cfg.AddRecent(dlg.Result); cat.Eyes2 = dlg.Result.ToArgb() == cat.Eyes.ToArgb() ? null : dlg.Result; Cfg.Changed(cat); Build();
+        };
+        Tip(eyeL, Str.T("look.eyeL")); Tip(eyeR, Str.T("look.eyeR"));
+        vc.Controls.Add(eyeL); vc.Controls.Add(eyeR);
+        int rsx = P(16) + (ew + eg) * 2;
+        var reset = new Pill(this) { Text = Str.T("look.reset"), Kind = PillKind.Seg, Bounds = new Rectangle(rsx, cy, P(16) + iw - rsx, P(38)) };
         reset.Click += (_, _) => { cat.ResetLook(); Cfg.Changed(cat); Build(); };
         vc.Controls.Add(reset);
         cy += P(38) + P(16);
@@ -756,7 +775,7 @@ sealed partial class SettingsForm
 
     static bool Matches(LookPreset p, CatProfile c) =>
         p.Fur1.ToArgb() == c.Fur1.ToArgb() && p.Shade?.ToArgb() == c.Shade?.ToArgb() && p.Light?.ToArgb() == c.Light?.ToArgb() && p.Outline?.ToArgb() == c.Outline?.ToArgb()
-        && p.Ears.ToArgb() == c.Ears.ToArgb() && p.Nose.ToArgb() == c.Nose.ToArgb() && p.Eyes.ToArgb() == c.Eyes.ToArgb()
+        && p.Ears.ToArgb() == c.Ears.ToArgb() && p.Nose.ToArgb() == c.Nose.ToArgb() && p.Eyes.ToArgb() == c.Eyes.ToArgb() && p.Eyes2?.ToArgb() == c.Eyes2?.ToArgb()
         && p.Pattern == c.Pattern && p.Accessory == c.Accessory && (p.Pattern == "none" || p.Fur3.ToArgb() == c.Fur3.ToArgb());
 
     string? AskName(string title, string initial)
